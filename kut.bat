@@ -1,1 +1,1 @@
-docker run --rm -it --network host -v "%cd%:/home/data" tupinumboor/utility zsh
+docker run --rm -it --network host -v "%cd%:/home/data" tupinumboor/utility bash
