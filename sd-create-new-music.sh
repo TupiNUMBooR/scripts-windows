@@ -5,10 +5,11 @@ set -euo pipefail
 # shellcheck disable=SC1091
 . .env
 
-dir="$(date +%m%d%H)"
+dir="$(date +%m%d-%H%M)"
 
 cd /mnt/d/k/art/manual-youtube
-mv suno/*.txt sunotxt/ || :
-cp -n suno/*.mp3 sunotxt/ || :
-sd-autocut-2.sh midjourney-2x suno "$dir"
-/mnt/c/Windows/explorer.exe "d:\\k\\art\\manual-youtube\\$dir"
+mv music/*.txt bonus/ || :
+cp -n music/*.mp3 bonus/ || :
+cp -n images/*.jpeg bonus/ || :
+sd-autocut-2.sh images music "../$dir"
+/mnt/c/Windows/explorer.exe "d:\\k\\art\\$dir"
