@@ -36,6 +36,7 @@ HTTP_CODE=$(curl -sS https://api.openai.com/v1/chat/completions \
   -d "{
     \"model\": \"gpt-5-mini\",
     \"messages\": [
+      {\"role\": \"system\", \"content\": \"Напиши текст для озвучки в видео шортс-формата. Для каждой вещи, которую указал пользователь - приведи один любопытный факт. Требуемый формат ответа: Только текст ролика.\"},
       {
         \"role\": \"user\",
         \"content\": $(jq -Rs . <<< \"$PROMPT\")
