@@ -8,6 +8,20 @@ API_KEY="${OPENAI_API_KEY:?Укажи OPENAI_API_KEY в окружении}"
 command -v curl >/dev/null || { echo "curl не найден" >&2; exit 1; }
 command -v jq   >/dev/null || { echo "jq не найден" >&2; exit 1; }
 
+SYSTEM_PROMPT=""
+
+# opts
+while getopts ":s:" opt; do
+  case "$opt" in
+    s) SYSTEM_PROMPT="$OPTARG" ;;
+    *)
+      echo "Использование: $0 [-s system_prompt] [prompt]" >&2
+      exit 1
+      ;;
+  esac
+done
+shift $((OPTIND - 1))
+
 # Ввод: либо аргумент, либо stdin
 if [[ $# -gt 0 ]]; then
   PROMPT="$*"
@@ -28,20 +42,24 @@ fi
 
 RESPONSE=$(mktemp)
 
+MESSAGES=$(jq -n \
+  --arg system "$SYSTEM_PROMPT" \
+  --arg user "$PROMPT" '
+  [
+    (select($system != "") | {role:"system", content:$system}),
+    {role:"user", content:$user}
+  ]
+')
+
 HTTP_CODE=$(curl -sS https://api.openai.com/v1/chat/completions \
   -w "%{http_code}" \
   -o "$RESPONSE" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"model\": \"gpt-5-mini\",
-    \"messages\": [
-      {
-        \"role\": \"user\",
-        \"content\": $(jq -Rs . <<< \"$PROMPT\")
-      }
-    ]
-  }"
+  -d "$(jq -n --argjson messages "$MESSAGES" '{
+        model: "gpt-5-mini",
+        messages: $messages
+      }')"
 )
 
 if [[ "$HTTP_CODE" != "200" ]]; then
