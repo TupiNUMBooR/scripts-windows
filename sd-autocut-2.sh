@@ -33,7 +33,7 @@ init_paths() {
   concat_file="$outdir/concat.txt"
   fadedir="$SD_TMP_DIR/faded"
   full_audio="$SD_TMP_DIR/$outdir-full-audio.mp3"
-  amv="$outdir/amv.mp4"
+  amv="$outdir.mp4"
 }
 
 ensure_dirs() {
