@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+. .env
+
+EXPLORER="/mnt/c/Windows/explorer.exe"
+
+# Upload settings
+YOUTUBE_UPLOAD="${YOUTUBE_UPLOAD:-0}"     # 1 to upload
+UPLOAD_PY="${UPLOAD_PY:-./yt-up/upload.py}"
+UPLOAD_PYTHON="${UPLOAD_PYTHON:-python3}"
+META_FROM_INFO="${META_FROM_INFO:-0}"     # 1 to parse title/desc from $info via awk instead of using variables
+
 die() { echo "ERROR: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"; }
 
@@ -11,15 +21,42 @@ need ls
 need head
 need wc
 need mktemp
+need sed
+need tr
+need realpath
+need python3
+need awk
 
+need "$UPLOAD_PY"
+need "$UPLOAD_PYTHON"
 need ask-ai.sh
 need tts.sh
 need create-picture-2.sh
 
-EXPLORER="/mnt/c/Windows/explorer.exe"
+# ---- timing ----
+declare -A __TIMER_START
 
-log_start() { echo "[$1] start -> $2" >&2; }
-log_end()   { echo "[$1] end   -> $2" >&2; }
+log_start() {
+  local tag="$1"
+  local msg="${2:-}"
+  __TIMER_START["$tag"]="$SECONDS"
+  echo "[$tag] start -> $msg" >&2
+}
+
+log_end() {
+  local tag="$1"
+  local msg="${2:-}"
+  local start="${__TIMER_START[$tag]:-}"
+
+  if [[ -n "$start" ]]; then
+    local elapsed
+    elapsed=$(awk "BEGIN {printf \"%.1f\", ($SECONDS - $start)}")
+    echo "[$tag] end   -> $msg (${elapsed}s)" >&2
+    unset "__TIMER_START[$tag]"
+  else
+    echo "[$tag] end   -> $msg" >&2
+  fi
+}
 
 open_in_windows_explorer() {
   local file="$1"
@@ -31,10 +68,17 @@ open_in_windows_explorer() {
   fi
 }
 
-# ---- temp workspace ----
-WORK_DIR="$(mktemp -d -t curiousfact.XXXXXX)"
-trap 'rm -rf "$WORK_DIR"' EXIT
-log_start "workdir" "$WORK_DIR"
+trim() {
+  # trims leading/trailing whitespace + removes CR
+  printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+create_temp() {
+  # ---- temp workspace ----
+  WORK_DIR="$(mktemp -d -t curiousfact.XXXXXX)"
+  trap 'rm -rf "$WORK_DIR"' EXIT
+  log_start "workdir" "$WORK_DIR"
+}
 
 # ---- generators ----
 gen_word() {
@@ -64,7 +108,7 @@ gen_fact() {
 EOF
 )" | tr -d '\r')"
 
-  r="$(printf '%s' "$r" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  r="$(trim "$r")"
   [[ -n "$r" ]] || die "Empty response"
 
   chars="$(printf '%s' "$r" | wc -c | tr -d ' ')"
@@ -100,7 +144,7 @@ Return ONLY the prompt.
 EOF
 )")"
 
-  p="$(printf '%s' "$p" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  p="$(trim "$p")"
   [[ -n "$p" ]] || die "Empty image prompt"
 
   chars="$(printf '%s' "$p" | wc -c | tr -d ' ')"
@@ -147,8 +191,55 @@ make_video() {
   log_end "video" "ok"
 }
 
+gen_meta() {
+  local word="$1" fact="$2"
+
+  log_start "meta" "generate title/desc"
+  ask-ai.sh "$(cat <<EOF
+Сгенерируй метаданные для YouTube Shorts по теме и тексту.
+Тема: $word
+Текст озвучки: $fact
+
+Верни СТРОГО в таком формате (2 строки):
+TITLE: ...
+DESC: ...
+EOF
+)" | tr -d '\r'
+  log_end "meta" "ok"
+}
+
+parse_title_from_info() {
+  local file="$1"
+  awk -F': ' '/^Заголовок:/ {sub(/^Заголовок:[[:space:]]*/, "", $0); print $0; exit}' "$file"
+}
+
+parse_desc_from_info() {
+  local file="$1"
+  awk '
+    BEGIN{found=0}
+    /^Описание:/{found=1; next}
+    found{print}
+  ' "$file" | sed '/^[[:space:]]*$/d'
+}
+
+do_upload() {
+  local video="$1" title="$2" desc="$3"
+  [[ "$YOUTUBE_UPLOAD" == "1" ]] || return 0
+
+  [[ -f "$UPLOAD_PYTHON" ]] || die "upload.py not found: $UPLOAD_PYTHON (set UPLOAD_PYTHON)"
+  [[ -f "$UPLOAD_PY" ]] || die "upload.py not found: $UPLOAD_PY (set UPLOAD_PY)"
+  [[ -s "$video" ]] || die "Video not found for upload: $video"
+  [[ -n "${title// }" ]] || die "Empty title for upload"
+
+  log_start "upload" "$video"
+  "$UPLOAD_PYTHON" "$UPLOAD_PY" -t "$title" -d "$desc" -p "private" "$video"
+  log_end "upload" "ok"
+}
+
 # ---- pipeline ----
 echo "=== Генерация факта + видео ==="
+log_start "total" "pipeline"
+create_temp
 
 word="$(gen_word | tr '[:upper:]' '[:lower:]')"
 printf '%s' "$word" > "$WORK_DIR/word.txt"
@@ -168,19 +259,12 @@ make_video "$audio" "$WORK_DIR" "$video"
 
 info="$word.txt"
 
-meta="$(ask-ai.sh "$(cat <<EOF
-Сгенерируй метаданные для YouTube Shorts по теме и тексту.
-Тема: $word
-Текст озвучки: $fact
+meta="$(gen_meta "$word" "$fact")"
+header="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p' | head -n 1)"
+content="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p' | head -n 1)"
 
-Верни СТРОГО в таком формате (2 строки):
-TITLE: ...
-DESC: ...
-EOF
-)")"
-
-header="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p')"
-content="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p')"
+header="$(trim "$header")"
+content="$(trim "$content")"
 
 {
   printf 'Тема:\n%s\n\n' "$word"
@@ -190,7 +274,17 @@ content="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p')"
   printf 'Описание:\n%s\n\n' "$content"
 } > "$info"
 
+# Optionally parse from info file (if you prefer "simple file + awk" as the source of truth)
+if [[ "$META_FROM_INFO" == "1" ]]; then
+  header="$(trim "$(parse_title_from_info "$info")")"
+  content="$(trim "$(parse_desc_from_info "$info")")"
+fi
+
+# Upload (optional)
+do_upload "$video" "$header" "$content"
+
 echo "OUTPUT_VIDEO=$video"
 open_in_windows_explorer "$video"
 
+log_end "total" "done"
 echo "=== Готово ==="
