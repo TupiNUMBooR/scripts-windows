@@ -166,6 +166,31 @@ gen_images "$img_prompt" "$WORK_DIR"
 video="$word.mp4"
 make_video "$audio" "$WORK_DIR" "$video"
 
+info="$word.txt"
+
+meta="$(ask-ai.sh "$(cat <<EOF
+Сгенерируй метаданные для YouTube Shorts по теме и тексту.
+Тема: $word
+Текст озвучки: $fact
+
+Верни СТРОГО в таком формате (2 строки):
+TITLE: ...
+DESC: ...
+EOF
+)")"
+
+header="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p')"
+content="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p')"
+
+{
+  printf '\n'
+  printf 'Тема: %s\n\n' "$word"
+  printf 'Факт:\n%s\n\n' "$fact"
+  printf 'Промпт для картинки:\n%s\n\n' "$img_prompt"
+  printf 'Заголовок: %s\n\n' "$header"
+  printf 'Описание:\n%s\n\n' "$content"
+} > "$info"
+
 echo "OUTPUT_VIDEO=$video"
 open_in_windows_explorer "$video"
 
