@@ -150,7 +150,7 @@ make_video() {
 # ---- pipeline ----
 echo "=== Генерация факта + видео ==="
 
-word="$(gen_word)"
+word="$(gen_word | tr '[:upper:]' '[:lower:]')"
 printf '%s' "$word" > "$WORK_DIR/word.txt"
 
 fact="$(gen_fact "$word")"
