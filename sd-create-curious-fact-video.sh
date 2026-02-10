@@ -3,85 +3,37 @@ set -euo pipefail
 
 . .env
 
+# =========================
+# 1) VARIABLES
+# =========================
 EXPLORER="/mnt/c/Windows/explorer.exe"
+YOUTUBE_UPLOAD="${YOUTUBE_UPLOAD:-0}" # 1 to upload
 
-# Upload settings
-YOUTUBE_UPLOAD="${YOUTUBE_UPLOAD:-0}"     # 1 to upload
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
 
+WORK_DIR=""
+
+# =========================
+# 2) FUNCTIONS
+# =========================
 die() { echo "ERROR: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"; }
 
-# ---- tools ----
-need ffmpeg
-need ffprobe
-need ls
-need head
-need wc
-need mktemp
-need sed
-need tr
-need realpath
-need python3
-need awk
+pfile() { printf '%s/%s' "$PROMPTS_DIR" "$1"; }
+need_prompt() { [[ -s "$(pfile "$1")" ]] || die "Prompt missing/empty: $(pfile "$1")"; }
+prompt() { need_prompt "$1"; cat "$(pfile "$1")"; }
 
-need ask-ai.sh
-need tts.sh
-need create-picture-2.sh
+trim() { printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
 
-# ---- paths ----
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
+log() { echo "[$1] ${2:-}" >&2; }
 
-need_prompt() {
-  local f="$1"
-  [[ -s "$PROMPTS_DIR/$f" ]] || die "Prompt file not found or empty: $PROMPTS_DIR/$f (run create-prompts.sh)"
-}
-
-# ---- prompt helpers ----
-esc_sed_repl() {
-  # Escape for sed replacement: \, &, and delimiter |
-  # Also strips CR to avoid Windows line endings issues.
-  printf '%s' "$1" | tr -d '\r' | sed -e 's/[\/&|\\]/\\&/g'
-}
-
-render_prompt() {
-  # Usage: render_prompt template_file "KEY=VALUE" ...
-  local template_file="$1"; shift
-  local out
-  out="$(cat "$PROMPTS_DIR/$template_file")"
-  local kv key val esc
-  for kv in "$@"; do
-    key="${kv%%=*}"
-    val="${kv#*=}"
-    esc="$(esc_sed_repl "$val")"
-    out="$(printf '%s' "$out" | sed -e "s|{{$key}}|$esc|g")"
-  done
-  printf '%s' "$out"
-}
-
-# ---- timing ----
-declare -A __TIMER_START
-
-log_start() {
-  local tag="$1"
-  local msg="${2:-}"
-  __TIMER_START["$tag"]="$SECONDS"
-  echo "[$tag] start -> $msg" >&2
-}
-
-log_end() {
-  local tag="$1"
-  local msg="${2:-}"
-  local start="${__TIMER_START[$tag]:-}"
-
-  if [[ -n "$start" ]]; then
-    local elapsed
-    elapsed=$(awk "BEGIN {printf \"%.1f\", ($SECONDS - $start)}")
-    echo "[$tag] end   -> $msg (${elapsed}s)" >&2
-    unset "__TIMER_START[$tag]"
-  else
-    echo "[$tag] end   -> $msg" >&2
-  fi
+timed_start() { echo "[$1] start -> ${2:-}" >&2; __T0="$SECONDS"; }
+timed_end() {
+  local tag="$1" msg="${2:-}"
+  local elapsed
+  elapsed="$(awk "BEGIN{printf \"%.1f\", ($SECONDS - ${__T0:-$SECONDS})}")"
+  echo "[$tag] end   -> $msg (${elapsed}s)" >&2
 }
 
 open_in_windows_explorer() {
@@ -94,81 +46,95 @@ open_in_windows_explorer() {
   fi
 }
 
-trim() {
-  # Trims leading/trailing whitespace and removes CR
-  printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+sed_esc() { printf '%s' "$1" | tr -d '\r' | sed 's/[\/&|\\]/\\&/g'; }
+
+render_topic_narration_file() {
+  # $1 template_file, $2 topic (string), $3 narration_file (file path)
+  # {{NARRATION}} must be on its own line in template
+  local tpl="$1" topic_esc
+  topic_esc="$(sed_esc "$2")"
+
+  sed -e "s|{{TOPIC}}|$topic_esc|g" "$(pfile "$tpl")" | sed -e "/{{NARRATION}}/{
+    r $3
+    d
+  }"
 }
 
-create_temp() {
-  # ---- temp workspace ----
+render_content_file() {
+  # $1 template_file, $2 content_file
+  # {{CONTENT}} must be on its own line in template
+  sed -e "/{{CONTENT}}/{
+    r $2
+    d
+  }" "$(pfile "$1")"
+}
+
+make_workdir() {
   WORK_DIR="$(mktemp -d -t curiousfact.XXXXXX)"
   trap 'rm -rf "$WORK_DIR"' EXIT
-  log_start "workdir" "$WORK_DIR"
+  log workdir "$WORK_DIR"
 }
 
-# ---- prompt files ----
-need_prompt "create_random_word.txt"
-need_prompt "create_text_for_video.txt"
-need_prompt "create_image_prompt.txt"
-need_prompt "create_yt_meta.txt"
-need_prompt "validate.txt"
-
-# ---- generators ----
 gen_word() {
-  log_start "word" "random word"
+  timed_start gen_word "random word"
   local w
-  w="$(ask-ai.sh "$(cat "$PROMPTS_DIR/random_word.txt")" \
-    | tr -d '\r' | tr -s '[:space:]' ' ' | tr -d '[:space:]')"
+  w="$(ask-ai.sh "$(prompt create_random_word.txt)" | tr -d '\r' | tr -s '[:space:]' ' ' | tr -d '[:space:]')"
   [[ -n "$w" ]] || die "Empty word"
-  log_end "word" "$w"
+  timed_end gen_word "$w"
   printf '%s' "$w"
 }
 
 gen_fact() {
-  local w="$1"
-  log_start "fact" "topic=$w"
-  local r chars
+  local topic="$1"
+  timed_start gen_fact "topic=$topic"
 
-  r="$(ask-ai.sh -s "$w" "$(cat "$PROMPTS_DIR/shorts_narration.txt")" | tr -d '\r')"
+  local r
+  r="$(ask-ai.sh -s "$topic" "$(prompt create_text_for_video.txt)" | tr -d '\r')"
   r="$(trim "$r")"
-  [[ -n "$r" ]] || die "Empty response"
+  [[ -n "$r" ]] || die "Empty fact"
 
-  chars="$(printf '%s' "$r" | wc -c | tr -d ' ')"
-  log_end "fact" "ok, ${chars} chars"
+  timed_end gen_fact "$(printf '%s' "$r" | wc -c | tr -d ' ') chars"
   printf '%s' "$r"
 }
 
 gen_audio() {
   local text="$1" out="$2"
-  log_start "audio" "$out"
+  timed_start gen_audio "$out"
   printf '%s' "$text" | tts.sh -v nova > "$out"
-  [[ -s "$out" ]] || die "Audio not created"
-  log_end "audio" "ok"
+  [[ -s "$out" ]] || die "Audio not created: $out"
+  timed_end gen_audio "ok"
 }
 
-optimize_img_prompt() {
-  local word="$1" fact="$2"
-  log_start "imgprompt" "optimize"
-  local p chars
+gen_img_prompt() {
+  local topic="$1" fact_file="$2"
+  timed_start optimize_img_prompt "topic=$topic"
 
-  p="$(render_prompt "image_prompt_template.txt" \
-      "TOPIC=$word" \
-      "NARRATION=$fact")"
-
+  local p
+  p="$(render_topic_narration_file create_image_prompt.txt "$topic" "$fact_file")"
   p="$(ask-ai.sh "$p")"
   p="$(trim "$p")"
   [[ -n "$p" ]] || die "Empty image prompt"
 
-  chars="$(printf '%s' "$p" | wc -c | tr -d ' ')"
-  log_end "imgprompt" "ok, ${chars} chars"
+  timed_end optimize_img_prompt "$(printf '%s' "$p" | wc -c | tr -d ' ') chars"
   printf '%s' "$p"
 }
 
 gen_images() {
-  local prompt="$1" dir="$2"
-  log_start "img" "generate"
-  ( cd "$dir" && create-picture-2.sh -n 4 -s 1024x1536 "$prompt" >/dev/null )
-  log_end "img" "generated"
+  local img_prompt="$1" dir="$2"
+  timed_start gen_images "generate"
+  ( cd "$dir" && create-picture-2.sh -n 4 -s 1024x1536 "$img_prompt" >/dev/null )
+  timed_end gen_images "generated"
+}
+
+gen_meta() {
+  local topic="$1" fact_file="$2"
+  timed_start gen_meta "title/desc"
+
+  local q
+  q="$(render_topic_narration_file create_yt_meta.txt "$topic" "$fact_file")"
+  ask-ai.sh "$q" | tr -d '\r'
+
+  timed_end gen_meta "ok"
 }
 
 make_video() {
@@ -180,16 +146,16 @@ make_video() {
   local concat="$dir/concat.txt"
   : > "$concat"
 
-  local abs
+  local img abs
   for img in "${imgs[@]}"; do
     abs="$(realpath "$img")"
-    echo "file '$abs'" >> "$concat"
-    echo "duration 10" >> "$concat"
+    printf "file '%s'\n" "$abs" >> "$concat"
+    printf "duration 10\n" >> "$concat"
   done
   abs="$(realpath "${imgs[-1]}")"
-  echo "file '$abs'" >> "$concat"
+  printf "file '%s'\n" "$abs" >> "$concat"
 
-  log_start "video" "$video"
+  timed_start make_video "$video"
   ffmpeg -hide_banner -loglevel error -y \
     -f concat -safe 0 -i "$concat" \
     -i "$audio" \
@@ -199,69 +165,72 @@ make_video() {
     -shortest \
     "$video"
 
-  [[ -s "$video" ]] || die "Video not created"
-  log_end "video" "ok"
-}
-
-gen_meta() {
-  local word="$1" fact="$2"
-  log_start "meta" "generate title/desc"
-
-  local p
-  p="$(render_prompt "meta_template.txt" \
-      "TOPIC=$word" \
-      "NARRATION=$fact")"
-
-  ask-ai.sh "$p" | tr -d '\r'
-  log_end "meta" "ok"
+  [[ -s "$video" ]] || die "Video not created: $video"
+  timed_end make_video "ok"
 }
 
 validate_info_with_ai() {
-  local info_file="$1"
-  log_start "validate" "$info_file"
+  local info_file="$1" q report verdict
+  timed_start validate_info_with_ai "$info_file"
 
-  [[ -s "$info_file" ]] || die "Info file not found or empty: $info_file"
+  [[ -s "$info_file" ]] || die "Info file missing/empty: $info_file"
+  q="$(render_content_file validate.txt "$info_file")"
 
-  local content p report verdict chars
-  content="$(cat "$info_file")"
-
-  p="$(render_prompt "validate_template.txt" \
-      "CONTENT=$content")"
-
-  report="$(ask-ai.sh "$p" | tr -d '\r')"
+  report="$(ask-ai.sh "$q" | tr -d '\r')"
   report="$(trim "$report")"
-  chars="$(printf '%s' "$report" | wc -c | tr -d ' ')"
+
   verdict="$(printf '%s\n' "$report" | sed -n 's/^VERDICT:[[:space:]]*//p' | head -n 1)"
   verdict="$(trim "$verdict")"
 
   if [[ "$verdict" != "PASS" ]]; then
-    log_end "validate" "FAIL (${chars} chars)"
+    timed_end validate_info_with_ai "FAIL"
     printf '%s\n' "$report" >&2
     return 1
   fi
 
-  log_end "validate" "PASS (${chars} chars)"
+  timed_end validate_info_with_ai "PASS"
   return 0
 }
 
 do_upload() {
   local video="$1" title="$2" desc="$3"
-  local videoreal="$(realpath "$video")"
-
   [[ "$YOUTUBE_UPLOAD" == "1" ]] || return 0
 
   [[ -s "$video" ]] || die "Video not found for upload: $video"
   [[ -n "${title// }" ]] || die "Empty title for upload"
 
-  log_start "upload" "$video"
-  yt-up.sh -t "$title" -d "$desc" -p "private" "$videoreal"
-  log_end "upload" "ok"
+  timed_start do_upload "$video"
+  yt-up.sh -t "$title" -d "$desc" -p "private" "$(realpath "$video")"
+  timed_end do_upload "ok"
 }
 
-# ---- pipeline ----
+cleanup_bg() {
+  local pid
+  for pid in "${pids[@]:-}"; do
+    kill "$pid" >/dev/null 2>&1 || true
+  done
+}
+
+# =========================
+# 3) CHECKS
+# =========================
+need ffmpeg; need ffprobe; need awk; need sed; need tr; need wc; need mktemp; need realpath; need ls; need head
+need ask-ai.sh; need tts.sh; need create-picture-2.sh
+[[ "$YOUTUBE_UPLOAD" == "1" ]] && need yt-up.sh || true
+
+need_prompt "create_random_word.txt"
+need_prompt "create_text_for_video.txt"
+need_prompt "create_image_prompt.txt"
+need_prompt "create_yt_meta.txt"
+need_prompt "validate.txt"
+
+# =========================
+# 4) PIPELINE
+# =========================
 echo "=== Fact + video generation ==="
-log_start "total" "pipeline"
-create_temp
+timed_start total "pipeline"
+
+make_workdir
 
 word="$(gen_word | tr '[:upper:]' '[:lower:]')"
 printf '%s' "$word" > "$WORK_DIR/word.txt"
@@ -271,75 +240,54 @@ printf '%s' "$fact" > "$WORK_DIR/fact.txt"
 
 audio="$WORK_DIR/$word.mp3"
 
-# Track background PIDs to kill on failure
 pids=()
-cleanup_bg() {
-  local pid
-  for pid in "${pids[@]:-}"; do
-    kill "$pid" >/dev/null 2>&1 || true
-  done
-}
 trap 'cleanup_bg' ERR INT TERM
 
-# Parallel stage: audio / images / meta
 (
   gen_audio "$fact" "$audio"
-) &
-pid_audio=$!
-pids+=("$pid_audio")
+) & pids+=("$!")
 
 (
-  img_prompt="$(optimize_img_prompt "$word" "$fact")"
+  img_prompt="$(gen_img_prompt "$word" "$WORK_DIR/fact.txt")"
   printf '%s' "$img_prompt" > "$WORK_DIR/image_prompt.txt"
   gen_images "$img_prompt" "$WORK_DIR"
-) &
-pid_img=$!
-pids+=("$pid_img")
+) & pids+=("$!")
 
 (
-  meta="$(gen_meta "$word" "$fact")"
-  printf '%s' "$meta" > "$WORK_DIR/meta_raw.txt"
-) &
-pid_meta=$!
-pids+=("$pid_meta")
+  gen_meta "$word" "$WORK_DIR/fact.txt" > "$WORK_DIR/meta_raw.txt"
+) & pid_meta=$!
 
-# Wait only what is needed for video first
-wait "$pid_audio" || die "Audio task failed"
-wait "$pid_img"   || die "Images task failed"
+wait "${pids[0]}" || die "Audio task failed"
+wait "${pids[1]}" || die "Images task failed"
 
 img_prompt="$(cat "$WORK_DIR/image_prompt.txt")"
-
 video="$word.mp4"
 make_video "$audio" "$WORK_DIR" "$video"
 
-# Now wait for meta + validate; validation must kill everything and abort on failure
-wait "$pid_meta"  || die "Meta task failed"
+wait "$pid_meta" || die "Meta task failed"
 meta="$(cat "$WORK_DIR/meta_raw.txt")"
 
-header="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p' | head -n 1)"
-content="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p' | head -n 1)"
-
-header="$(trim "$header")"
-content="$(trim "$content")"
+title="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p' | head -n 1)"
+desc="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p' | head -n 1)"
+title="$(trim "$title")"
+desc="$(trim "$desc")"
 
 info="$word.txt"
 {
   printf 'Topic:\n%s\n\n' "$word"
   printf 'Fact:\n%s\n\n' "$fact"
   printf 'Image prompt:\n%s\n\n' "$img_prompt"
-  printf 'Title: %s\n\n' "$header"
-  printf 'Description:\n%s\n\n' "$content"
+  printf 'Title: %s\n\n' "$title"
+  printf 'Description:\n%s\n\n' "$desc"
 } > "$info"
 
 validate_info_with_ai "$info" || die "Validation failed"
-
-# Upload (optional) waits on video + meta + validation PASS (already satisfied here)
-do_upload "$video" "$header" "$content"
+do_upload "$video" "$title" "$desc"
 
 echo "OUTPUT_VIDEO=$video"
 open_in_windows_explorer "$video"
 
-log_end "total" "done"
+timed_end total "done"
 echo "=== Done ==="
 
 ## TODO
