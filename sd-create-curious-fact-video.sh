@@ -143,7 +143,6 @@ Constraints:
 - 25–60 words
 - no text, letters, logos, watermarks
 Return ONLY the prompt.
-
 EOF
 )")"
 
@@ -217,6 +216,47 @@ EOF
   log_end "meta" "ok"
 }
 
+validate_info_with_ai() {
+  local info_file="$1"
+  log_start "validate" "$info_file"
+
+  [[ -s "$info_file" ]] || die "Info file not found or empty: $info_file"
+
+  local report verdict chars
+  report="$(ask-ai.sh "$(cat <<EOF
+Check whether the content below follows the task constraints.
+
+Rules to verify:
+- Narration (Fact) is 55–90 English words.
+- Kurzgesagt-like tone: punchy, clean, playful science.
+- No viewer addressing: no "you", "your", "did you know", "imagine", "let's", "watch", "look".
+- No lists, headings, quotes, emojis, links, or “in this video”.
+- Image prompt: 25–60 words, Kurzgesagt-inspired infographic look, no text/logos/watermarks.
+- Metadata: English. TITLE <= 70 chars, no ALL CAPS. DESC: 1–2 sentences + 3–6 hashtags. No "you/your". No quotes.
+
+Return EXACTLY 2 lines:
+VERDICT: PASS or FAIL
+NOTES: short reason, mention which field breaks rules if any
+CONTENT:
+$(cat "$info_file")
+EOF
+)" | tr -d '\r')"
+
+  report="$(trim "$report")"
+  chars="$(printf '%s' "$report" | wc -c | tr -d ' ')"
+  verdict="$(printf '%s\n' "$report" | sed -n 's/^VERDICT:[[:space:]]*//p' | head -n 1)"
+  verdict="$(trim "$verdict")"
+
+  if [[ "$verdict" != "PASS" ]]; then
+    log_end "validate" "FAIL (${chars} chars)"
+    printf '%s\n' "$report" >&2
+    return 1
+  fi
+
+  log_end "validate" "PASS (${chars} chars)"
+  return 0
+}
+
 do_upload() {
   local video="$1" title="$2" desc="$3"
   local videoreal="$(realpath "$video")"
@@ -243,24 +283,59 @@ fact="$(gen_fact "$word")"
 printf '%s' "$fact" > "$WORK_DIR/fact.txt"
 
 audio="$WORK_DIR/$word.mp3"
-gen_audio "$fact" "$audio"
 
-img_prompt="$(optimize_img_prompt "$word" "$fact")"
-printf '%s' "$img_prompt" > "$WORK_DIR/image_prompt.txt"
-gen_images "$img_prompt" "$WORK_DIR"
+# Track background PIDs to kill on failure
+pids=()
+cleanup_bg() {
+  local pid
+  for pid in "${pids[@]:-}"; do
+    kill "$pid" >/dev/null 2>&1 || true
+  done
+}
+trap 'cleanup_bg' ERR INT TERM
+
+# Parallel stage: audio / images / meta
+(
+  gen_audio "$fact" "$audio"
+) &
+pid_audio=$!
+pids+=("$pid_audio")
+
+(
+  img_prompt="$(optimize_img_prompt "$word" "$fact")"
+  printf '%s' "$img_prompt" > "$WORK_DIR/image_prompt.txt"
+  gen_images "$img_prompt" "$WORK_DIR"
+) &
+pid_img=$!
+pids+=("$pid_img")
+
+(
+  meta="$(gen_meta "$word" "$fact")"
+  printf '%s' "$meta" > "$WORK_DIR/meta_raw.txt"
+) &
+pid_meta=$!
+pids+=("$pid_meta")
+
+# Wait only what is needed for video first
+wait "$pid_audio" || die "Audio task failed"
+wait "$pid_img"   || die "Images task failed"
+
+img_prompt="$(cat "$WORK_DIR/image_prompt.txt")"
 
 video="$word.mp4"
 make_video "$audio" "$WORK_DIR" "$video"
 
-info="$word.txt"
+# Now wait for meta + validate; validation must kill everything and abort on failure
+wait "$pid_meta"  || die "Meta task failed"
+meta="$(cat "$WORK_DIR/meta_raw.txt")"
 
-meta="$(gen_meta "$word" "$fact")"
 header="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p' | head -n 1)"
 content="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p' | head -n 1)"
 
 header="$(trim "$header")"
 content="$(trim "$content")"
 
+info="$word.txt"
 {
   printf 'Topic:\n%s\n\n' "$word"
   printf 'Fact:\n%s\n\n' "$fact"
@@ -269,7 +344,9 @@ content="$(trim "$content")"
   printf 'Description:\n%s\n\n' "$content"
 } > "$info"
 
-# Upload (optional)
+validate_info_with_ai "$info" || die "Validation failed"
+
+# Upload (optional) waits on video + meta + validation PASS (already satisfied here)
 do_upload "$video" "$header" "$content"
 
 echo "OUTPUT_VIDEO=$video"
@@ -279,6 +356,5 @@ log_end "total" "done"
 echo "=== Done ==="
 
 ## TODO
-# No addressing the viewer
 # Always add own tag
 # Third account API key
