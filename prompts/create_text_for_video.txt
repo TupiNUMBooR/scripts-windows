@@ -1,4 +1,4 @@
-Write narration text for a YouTube Shorts video based on the topic from the system message (one word).
+Write narration text for a YouTube Shorts video based on the topic from the user message (one word).
 
 Style:
 - Kurzgesagt-like: punchy, clean, playful science tone.

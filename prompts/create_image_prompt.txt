@@ -1,13 +1,11 @@
-Write ONE English text-to-image prompt for a vertical illustration (1024x1536) for YouTube Shorts.
+Write ONE English text-to-image prompt for YouTube Shorts video slide
 
 Topic: "{{TOPIC}}"
 Narration text: "{{NARRATION}}"
 
-Style:
-- Kurzgesagt-inspired infographic look: clean vector shapes, bold geometry, smooth gradients, high contrast, playful scientific vibe.
-- Minimalist background, iconic central subject, tiny symbolic details.
-
 Constraints:
-- 25–60 words
-- no text, letters, logos, watermarks
+- 20–60 words
+- vivid colorful surreal digital art
+- slightly abstract, conceptual
+- emotional, intriguing
 Return ONLY the prompt.

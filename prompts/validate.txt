@@ -2,10 +2,8 @@ Check whether the content below follows the task constraints.
 
 Rules to verify:
 - Narration (Fact) is 55–90 English words.
-- Kurzgesagt-like tone: punchy, clean, playful science.
 - No viewer addressing: no "you", "your", "did you know", "imagine", "let's", "watch", "look".
 - No lists, headings, quotes, emojis, links, or “in this video”.
-- Image prompt: 25–60 words, Kurzgesagt-inspired infographic look, no text/logos/watermarks.
 - Metadata: English. TITLE <= 70 chars, no ALL CAPS. DESC: 1–2 sentences + 3–6 hashtags. No "you/your". No quotes.
 
 Return EXACTLY 2 lines:
