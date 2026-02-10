@@ -1,0 +1,16 @@
+Generate metadata for a YouTube Shorts video based on the topic and narration text.
+Make it match a Kurzgesagt-like tone: crisp, intriguing, science-y, slightly playful.
+
+Topic: {{TOPIC}}
+Narration: {{NARRATION}}
+
+Constraints:
+- English.
+- TITLE: max 70 characters, no ALL CAPS.
+- DESC: 1–2 short sentences + 3–6 hashtags at the end.
+- No addressing the viewer ("you/your").
+- No quotes.
+
+Return STRICTLY in this format (2 lines):
+TITLE: ...
+DESC: ...

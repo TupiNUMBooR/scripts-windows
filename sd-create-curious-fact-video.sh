@@ -28,6 +28,37 @@ need ask-ai.sh
 need tts.sh
 need create-picture-2.sh
 
+# ---- paths ----
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+PROMPTS_DIR="${PROMPTS_DIR:-$SCRIPT_DIR/prompts}"
+
+need_prompt() {
+  local f="$1"
+  [[ -s "$PROMPTS_DIR/$f" ]] || die "Prompt file not found or empty: $PROMPTS_DIR/$f (run create-prompts.sh)"
+}
+
+# ---- prompt helpers ----
+esc_sed_repl() {
+  # Escape for sed replacement: \, &, and delimiter |
+  # Also strips CR to avoid Windows line endings issues.
+  printf '%s' "$1" | tr -d '\r' | sed -e 's/[\/&|\\]/\\&/g'
+}
+
+render_prompt() {
+  # Usage: render_prompt template_file "KEY=VALUE" ...
+  local template_file="$1"; shift
+  local out
+  out="$(cat "$PROMPTS_DIR/$template_file")"
+  local kv key val esc
+  for kv in "$@"; do
+    key="${kv%%=*}"
+    val="${kv#*=}"
+    esc="$(esc_sed_repl "$val")"
+    out="$(printf '%s' "$out" | sed -e "s|{{$key}}|$esc|g")"
+  done
+  printf '%s' "$out"
+}
+
 # ---- timing ----
 declare -A __TIMER_START
 
@@ -75,11 +106,18 @@ create_temp() {
   log_start "workdir" "$WORK_DIR"
 }
 
+# ---- prompt files ----
+need_prompt "create_random_word.txt"
+need_prompt "create_text_for_video.txt"
+need_prompt "create_image_prompt.txt"
+need_prompt "create_yt_meta.txt"
+need_prompt "validate.txt"
+
 # ---- generators ----
 gen_word() {
   log_start "word" "random word"
   local w
-  w="$(ask-ai.sh 'Generate a random word. One word only, not too complex and not too common.' \
+  w="$(ask-ai.sh "$(cat "$PROMPTS_DIR/random_word.txt")" \
     | tr -d '\r' | tr -s '[:space:]' ' ' | tr -d '[:space:]')"
   [[ -n "$w" ]] || die "Empty word"
   log_end "word" "$w"
@@ -91,23 +129,7 @@ gen_fact() {
   log_start "fact" "topic=$w"
   local r chars
 
-  r="$(ask-ai.sh -s "$w" "$(cat <<'EOF'
-Write narration text for a YouTube Shorts video based on the topic from the system message (one word).
-
-Style:
-- Kurzgesagt-like: punchy, clean, playful science tone.
-- Short sentences. Strong rhythm. Vivid but precise imagery.
-- Light irony is OK. No cringe.
-
-Hard constraints:
-- 55–90 words in English.
-- Structure: hook → explanation → final line with a punchy “wow” statement (NOT a question).
-- Strictly NO viewer addressing: no "you", "your", "did you know", "imagine", "let’s", "watch", "look".
-- No lists, headings, quotes, emojis, links, or “in this video”.
-- Output only the clean narration text.
-EOF
-)" | tr -d '\r')"
-
+  r="$(ask-ai.sh -s "$w" "$(cat "$PROMPTS_DIR/shorts_narration.txt")" | tr -d '\r')"
   r="$(trim "$r")"
   [[ -n "$r" ]] || die "Empty response"
 
@@ -129,23 +151,11 @@ optimize_img_prompt() {
   log_start "imgprompt" "optimize"
   local p chars
 
-  p="$(ask-ai.sh "$(cat <<EOF
-Write ONE English text-to-image prompt for a vertical illustration (1024x1536) for YouTube Shorts.
+  p="$(render_prompt "image_prompt_template.txt" \
+      "TOPIC=$word" \
+      "NARRATION=$fact")"
 
-Topic: "$word"
-Narration text: "$fact"
-
-Style:
-- Kurzgesagt-inspired infographic look: clean vector shapes, bold geometry, smooth gradients, high contrast, playful scientific vibe.
-- Minimalist background, iconic central subject, tiny symbolic details.
-
-Constraints:
-- 25–60 words
-- no text, letters, logos, watermarks
-Return ONLY the prompt.
-EOF
-)")"
-
+  p="$(ask-ai.sh "$p")"
   p="$(trim "$p")"
   [[ -n "$p" ]] || die "Empty image prompt"
 
@@ -195,24 +205,14 @@ make_video() {
 
 gen_meta() {
   local word="$1" fact="$2"
-
   log_start "meta" "generate title/desc"
-  ask-ai.sh "$(cat <<EOF
-Generate metadata for a YouTube Shorts video based on the topic and narration text.
-Make it match a Kurzgesagt-like tone: crisp, intriguing, science-y, slightly playful.
 
-Constraints:
-- English.
-- TITLE: max 70 characters, no ALL CAPS.
-- DESC: 1–2 short sentences + 3–6 hashtags at the end.
-- No addressing the viewer ("you/your").
-- No quotes.
+  local p
+  p="$(render_prompt "meta_template.txt" \
+      "TOPIC=$word" \
+      "NARRATION=$fact")"
 
-Return STRICTLY in this format (2 lines):
-TITLE: ...
-DESC: ...
-EOF
-)" | tr -d '\r'
+  ask-ai.sh "$p" | tr -d '\r'
   log_end "meta" "ok"
 }
 
@@ -222,26 +222,13 @@ validate_info_with_ai() {
 
   [[ -s "$info_file" ]] || die "Info file not found or empty: $info_file"
 
-  local report verdict chars
-  report="$(ask-ai.sh "$(cat <<EOF
-Check whether the content below follows the task constraints.
+  local content p report verdict chars
+  content="$(cat "$info_file")"
 
-Rules to verify:
-- Narration (Fact) is 55–90 English words.
-- Kurzgesagt-like tone: punchy, clean, playful science.
-- No viewer addressing: no "you", "your", "did you know", "imagine", "let's", "watch", "look".
-- No lists, headings, quotes, emojis, links, or “in this video”.
-- Image prompt: 25–60 words, Kurzgesagt-inspired infographic look, no text/logos/watermarks.
-- Metadata: English. TITLE <= 70 chars, no ALL CAPS. DESC: 1–2 sentences + 3–6 hashtags. No "you/your". No quotes.
+  p="$(render_prompt "validate_template.txt" \
+      "CONTENT=$content")"
 
-Return EXACTLY 2 lines:
-VERDICT: PASS or FAIL
-NOTES: short reason, mention which field breaks rules if any
-CONTENT:
-$(cat "$info_file")
-EOF
-)" | tr -d '\r')"
-
+  report="$(ask-ai.sh "$p" | tr -d '\r')"
   report="$(trim "$report")"
   chars="$(printf '%s' "$report" | wc -c | tr -d ' ')"
   verdict="$(printf '%s\n' "$report" | sed -n 's/^VERDICT:[[:space:]]*//p' | head -n 1)"
