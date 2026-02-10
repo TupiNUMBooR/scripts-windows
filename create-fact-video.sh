@@ -243,49 +243,72 @@ audio="$WORK_DIR/$word.mp3"
 pids=()
 trap 'cleanup_bg' ERR INT TERM
 
+# --- audio (independent) ---
 (
   gen_audio "$fact" "$audio"
-) & pids+=("$!")
+) & pid_audio=$!; pids+=("$pid_audio")
 
+# --- images: prompt -> images ---
 (
   img_prompt="$(gen_img_prompt "$word" "$WORK_DIR/fact.txt")"
   printf '%s' "$img_prompt" > "$WORK_DIR/image_prompt.txt"
   gen_images "$img_prompt" "$WORK_DIR"
-) & pids+=("$!")
+) & pid_img=$!; pids+=("$pid_img")
 
+# --- meta (independent) ---
 (
   gen_meta "$word" "$WORK_DIR/fact.txt" > "$WORK_DIR/meta_raw.txt"
-) & pid_meta=$!
+) & pid_meta=$!; pids+=("$pid_meta")
 
-wait "${pids[0]}" || die "Audio task failed"
-wait "${pids[1]}" || die "Images task failed"
+# --- validation (runs in parallel, waits for prerequisites) ---
+(
+  # Wait until both files appear (prompt + meta). If upstream dies, this will be killed by cleanup_bg.
+  while [[ ! -s "$WORK_DIR/image_prompt.txt" || ! -s "$WORK_DIR/meta_raw.txt" ]]; do
+    sleep 0.1
+  done
+
+  img_prompt="$(cat "$WORK_DIR/image_prompt.txt")"
+  meta="$(cat "$WORK_DIR/meta_raw.txt")"
+
+  title="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p' | head -n 1)"
+  desc="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p' | head -n 1)"
+  title="$(trim "$title")"
+  desc="$(trim "$desc")"
+
+  info="$word.txt"
+  {
+    printf 'Topic:\n%s\n\n' "$word"
+    printf 'Fact:\n%s\n\n' "$fact"
+    printf 'Image prompt:\n%s\n\n' "$img_prompt"
+    printf 'Title: %s\n\n' "$title"
+    printf 'Description:\n%s\n\n' "$desc"
+  } > "$info"
+
+  validate_info_with_ai "$info"
+) & pid_val=$!; pids+=("$pid_val")
+
+# ---- FAIL FAST: wait validation first ----
+wait "$pid_val" || die "Validation failed"
+
+# ---- Now wait only what is needed for the video ----
+wait "$pid_audio" || die "Audio task failed"
+wait "$pid_img"   || die "Images task failed"
 
 img_prompt="$(cat "$WORK_DIR/image_prompt.txt")"
 video="$word.mp4"
 make_video "$audio" "$WORK_DIR" "$video"
 
-wait "$pid_meta" || die "Meta task failed"
+# Meta already produced earlier (and used by validation), safe to read:
 meta="$(cat "$WORK_DIR/meta_raw.txt")"
-
 title="$(printf '%s\n' "$meta" | sed -n 's/^TITLE:[[:space:]]*//p' | head -n 1)"
 desc="$(printf '%s\n' "$meta" | sed -n 's/^DESC:[[:space:]]*//p' | head -n 1)"
 title="$(trim "$title")"
 desc="$(trim "$desc")"
 
-info="$word.txt"
-{
-  printf 'Topic:\n%s\n\n' "$word"
-  printf 'Fact:\n%s\n\n' "$fact"
-  printf 'Image prompt:\n%s\n\n' "$img_prompt"
-  printf 'Title: %s\n\n' "$title"
-  printf 'Description:\n%s\n\n' "$desc"
-} > "$info"
-
-validate_info_with_ai "$info" || die "Validation failed"
 do_upload "$video" "$title" "$desc"
 
 echo "OUTPUT_VIDEO=$video"
-open_in_windows_explorer "$video"
+open_in_windows_explorer "$video"`
 
 timed_end total "done"
 echo "=== Done ==="

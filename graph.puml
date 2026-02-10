@@ -1,5 +1,5 @@
 @startuml
-title Shorts Pipeline — Operation DAG
+title Shorts Pipeline — Operation DAG (parallel validation)
 
 skinparam shadowing false
 skinparam nodesep 40
@@ -18,19 +18,18 @@ endlegend
 ' === OpenAI text generation ===
 rectangle "gen_word" as W #ADD8E6
 rectangle "gen_fact" as F #ADD8E6
-rectangle "optimize_img_prompt" as IP #ADD8E6
-rectangle "gen_meta" as M #ADD8E6
-rectangle "validate_info_with_ai" as VAL #ADD8E6
 
 W --> F
 
-W --> IP
-F --> IP
+rectangle "optimize_img_prompt" as IP #ADD8E6
+rectangle "gen_meta" as M #ADD8E6
 
-W --> M
+F --> IP
 F --> M
 
-W --> VAL
+' === Parallel validation (starts early) ===
+rectangle "validate_info_with_ai" as VAL #ADD8E6
+
 F --> VAL
 IP --> VAL
 M --> VAL
@@ -47,7 +46,7 @@ F --> A
 A --> V
 IM --> V
 
-' === Upload ===
+' === Upload (gated by validation) ===
 rectangle "do_upload" as U #FFB6C1
 
 V --> U
