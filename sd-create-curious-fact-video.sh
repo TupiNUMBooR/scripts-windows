@@ -7,9 +7,6 @@ EXPLORER="/mnt/c/Windows/explorer.exe"
 
 # Upload settings
 YOUTUBE_UPLOAD="${YOUTUBE_UPLOAD:-0}"     # 1 to upload
-UPLOAD_PY="${UPLOAD_PY:-./yt-up/upload.py}"
-UPLOAD_PYTHON="${UPLOAD_PYTHON:-python3}"
-META_FROM_INFO="${META_FROM_INFO:-0}"     # 1 to parse title/desc from $info via awk instead of using variables
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"; }
@@ -27,8 +24,6 @@ need realpath
 need python3
 need awk
 
-need "$UPLOAD_PY"
-need "$UPLOAD_PYTHON"
 need ask-ai.sh
 need tts.sh
 need create-picture-2.sh
@@ -224,15 +219,15 @@ parse_desc_from_info() {
 
 do_upload() {
   local video="$1" title="$2" desc="$3"
+  local videoreal="$(realpath "$video")"
+
   [[ "$YOUTUBE_UPLOAD" == "1" ]] || return 0
 
-  [[ -f "$UPLOAD_PYTHON" ]] || die "upload.py not found: $UPLOAD_PYTHON (set UPLOAD_PYTHON)"
-  [[ -f "$UPLOAD_PY" ]] || die "upload.py not found: $UPLOAD_PY (set UPLOAD_PY)"
   [[ -s "$video" ]] || die "Video not found for upload: $video"
   [[ -n "${title// }" ]] || die "Empty title for upload"
 
   log_start "upload" "$video"
-  "$UPLOAD_PYTHON" "$UPLOAD_PY" -t "$title" -d "$desc" -p "private" "$video"
+  yt-up.sh -t "$title" -d "$desc" -p "private" "$videoreal"
   log_end "upload" "ok"
 }
 
@@ -274,12 +269,6 @@ content="$(trim "$content")"
   printf 'Описание:\n%s\n\n' "$content"
 } > "$info"
 
-# Optionally parse from info file (if you prefer "simple file + awk" as the source of truth)
-if [[ "$META_FROM_INFO" == "1" ]]; then
-  header="$(trim "$(parse_title_from_info "$info")")"
-  content="$(trim "$(parse_desc_from_info "$info")")"
-fi
-
 # Upload (optional)
 do_upload "$video" "$header" "$content"
 
@@ -288,3 +277,9 @@ open_in_windows_explorer "$video"
 
 log_end "total" "done"
 echo "=== Готово ==="
+
+## TODO
+
+# Без обращения к смотрящему
+# Всегда добавляй свой тег
+# Ключ третьего аккаунта
