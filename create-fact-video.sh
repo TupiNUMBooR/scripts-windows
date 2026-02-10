@@ -308,7 +308,7 @@ desc="$(trim "$desc")"
 do_upload "$video" "$title" "$desc"
 
 echo "OUTPUT_VIDEO=$video"
-open_in_windows_explorer "$video"`
+open_in_windows_explorer "$video"
 
 timed_end total "done"
 echo "=== Done ==="
