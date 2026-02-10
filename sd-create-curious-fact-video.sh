@@ -64,7 +64,7 @@ open_in_windows_explorer() {
 }
 
 trim() {
-  # trims leading/trailing whitespace + removes CR
+  # Trims leading/trailing whitespace and removes CR
   printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
@@ -79,7 +79,7 @@ create_temp() {
 gen_word() {
   log_start "word" "random word"
   local w
-  w="$(ask-ai.sh 'Придумай рандомное слово. Только одно слово, не слишком сложное и не слишком обычное.' \
+  w="$(ask-ai.sh 'Generate a random word. One word only, not too complex and not too common.' \
     | tr -d '\r' | tr -s '[:space:]' ' ' | tr -d '[:space:]')"
   [[ -n "$w" ]] || die "Empty word"
   log_end "word" "$w"
@@ -92,16 +92,19 @@ gen_fact() {
   local r chars
 
   r="$(ask-ai.sh -s "$w" "$(cat <<'EOF'
-Напиши текст для озвучки YouTube Shorts по теме из системного сообщения (одно слово).
+Write narration text for a YouTube Shorts video based on the topic from the system message (one word).
 
-Требования:
-- Один реально любопытный факт, интересный сам по себе.
-- 55–90 слов по-русски.
-- Структура: крючок → объяснение → финальная фраза с вау-эффектом.
-- Строго без обращения к зрителю: никаких "ты", "вы", "тебе", "вам", "знаете ли", "представьте/представляете", "давайте", "смотрите".
-- Изложение безличное/нейтральное: как справка или рассказ диктора.
-- Без списков, заголовков, кавычек, эмодзи, ссылок, «в этом видео».
-- Только чистый текст озвучки.
+Style:
+- Kurzgesagt-like: punchy, clean, playful science tone.
+- Short sentences. Strong rhythm. Vivid but precise imagery.
+- Light irony is OK. No cringe.
+
+Hard constraints:
+- 55–90 words in English.
+- Structure: hook → explanation → final line with a punchy “wow” statement (NOT a question).
+- Strictly NO viewer addressing: no "you", "your", "did you know", "imagine", "let’s", "watch", "look".
+- No lists, headings, quotes, emojis, links, or “in this video”.
+- Output only the clean narration text.
 EOF
 )" | tr -d '\r')"
 
@@ -127,17 +130,20 @@ optimize_img_prompt() {
   local p chars
 
   p="$(ask-ai.sh "$(cat <<EOF
-Write ONE English text-to-image prompt for a portrait illustration (1024x1536) for YouTube Shorts.
+Write ONE English text-to-image prompt for a vertical illustration (1024x1536) for YouTube Shorts.
 
 Topic: "$word"
 Narration text: "$fact"
 
+Style:
+- Kurzgesagt-inspired infographic look: clean vector shapes, bold geometry, smooth gradients, high contrast, playful scientific vibe.
+- Minimalist background, iconic central subject, tiny symbolic details.
+
 Constraints:
-- 20–60 words
-- vivid colorful surreal digital art
-- emotional, intriguing
+- 25–60 words
 - no text, letters, logos, watermarks
 Return ONLY the prompt.
+
 EOF
 )")"
 
@@ -193,30 +199,22 @@ gen_meta() {
 
   log_start "meta" "generate title/desc"
   ask-ai.sh "$(cat <<EOF
-Сгенерируй метаданные для YouTube Shorts по теме и тексту.
-Тема: $word
-Текст озвучки: $fact
+Generate metadata for a YouTube Shorts video based on the topic and narration text.
+Make it match a Kurzgesagt-like tone: crisp, intriguing, science-y, slightly playful.
 
-Верни СТРОГО в таком формате (2 строки):
+Constraints:
+- English.
+- TITLE: max 70 characters, no ALL CAPS.
+- DESC: 1–2 short sentences + 3–6 hashtags at the end.
+- No addressing the viewer ("you/your").
+- No quotes.
+
+Return STRICTLY in this format (2 lines):
 TITLE: ...
 DESC: ...
 EOF
 )" | tr -d '\r'
   log_end "meta" "ok"
-}
-
-parse_title_from_info() {
-  local file="$1"
-  awk -F': ' '/^Заголовок:/ {sub(/^Заголовок:[[:space:]]*/, "", $0); print $0; exit}' "$file"
-}
-
-parse_desc_from_info() {
-  local file="$1"
-  awk '
-    BEGIN{found=0}
-    /^Описание:/{found=1; next}
-    found{print}
-  ' "$file" | sed '/^[[:space:]]*$/d'
 }
 
 do_upload() {
@@ -234,7 +232,7 @@ do_upload() {
 }
 
 # ---- pipeline ----
-echo "=== Генерация факта + видео ==="
+echo "=== Fact + video generation ==="
 log_start "total" "pipeline"
 create_temp
 
@@ -264,11 +262,11 @@ header="$(trim "$header")"
 content="$(trim "$content")"
 
 {
-  printf 'Тема:\n%s\n\n' "$word"
-  printf 'Факт:\n%s\n\n' "$fact"
-  printf 'Промпт для картинки:\n%s\n\n' "$img_prompt"
-  printf 'Заголовок: %s\n\n' "$header"
-  printf 'Описание:\n%s\n\n' "$content"
+  printf 'Topic:\n%s\n\n' "$word"
+  printf 'Fact:\n%s\n\n' "$fact"
+  printf 'Image prompt:\n%s\n\n' "$img_prompt"
+  printf 'Title: %s\n\n' "$header"
+  printf 'Description:\n%s\n\n' "$content"
 } > "$info"
 
 # Upload (optional)
@@ -278,10 +276,9 @@ echo "OUTPUT_VIDEO=$video"
 open_in_windows_explorer "$video"
 
 log_end "total" "done"
-echo "=== Готово ==="
+echo "=== Done ==="
 
 ## TODO
-
-# Без обращения к смотрящему
-# Всегда добавляй свой тег
-# Ключ третьего аккаунта
+# No addressing the viewer
+# Always add own tag
+# Third account API key
