@@ -1,1 +1,0 @@
-Generate a random word. One word only, not too complex and not too common.
