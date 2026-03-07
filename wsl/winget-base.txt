@@ -1,0 +1,6 @@
+7zip.7zip
+OpenVPNTechnologies.OpenVPNConnect
+Mozilla.Firefox
+VideoLAN.VLC
+Microsoft.VisualStudioCode
+Skillbrains.Lightshot
