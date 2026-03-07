@@ -5,15 +5,12 @@ sync_newer() {
   local a=$1
   local b=$2
 
-  # nothing to do if both files are missing
-  [[ -f $a || -f $b ]] || return 0
+  [[ -f $a || -f $b ]] || { echo "sync: neither $a nor $b exists"; return 0; }
 
-  # copy if only one file exists
-  [[ -f $a && ! -f $b ]] && { cp -f "$a" "$b"; return; }
-  [[ -f $b && ! -f $a ]] && { cp -f "$b" "$a"; return; }
+  [[ -f $a && ! -f $b ]] && { cp -f "$a" "$b"; echo "sync: $a -> $b"; return; }
+  [[ -f $b && ! -f $a ]] && { cp -f "$b" "$a"; echo "sync: $b -> $a"; return; }
 
-  # both exist: copy the newer one
-  [[ $a -nt $b ]] && cp -f "$a" "$b" || cp -f "$b" "$a"
+  [[ $a -nt $b ]] && { cp -f "$a" "$b"; echo "sync: $a -> $b"; } || { cp -f "$b" "$a"; echo "sync: $b -> $a"; }
 }
 
 . .env
@@ -39,7 +36,7 @@ git config --global core.autocrlf input
 
 pacman -Sy --needed --ask=4 archlinux-keyring
 pacman -Su --ask=4
-pacman -S --needed --ask=4 - < packages.txt
+pacman -S --needed --ask=4 - < "$WSL_FILES_DIR/packages.txt"
 
 pipx install gallery-dl
 pipx ensurepath
@@ -54,3 +51,5 @@ if [[ "$SHELL" != "/bin/bash" ]]; then
   chsh -s /bin/bash
   reboot
 fi
+
+echo "WSL archlinux updated"
