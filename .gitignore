@@ -1,12 +1,4 @@
 .idea
 .venv
 .env
-
-*.mp3
-*.mp4
-*.mkv
-*.jpg
-*.jpeg
-*.png
-
 cache.sqlite3
