@@ -1,0 +1,50 @@
+{
+  "$schema": "https://aka.ms/winget-packages.schema.2.0.json",
+  "CreationDate": "2026-03-08T02:56:37.230-00:00",
+  "Sources": [
+    {
+      "Packages": [
+        {
+          "PackageIdentifier": "7zip.7zip"
+        },
+        {
+          "PackageIdentifier": "OpenVPNTechnologies.OpenVPNConnect"
+        },
+        {
+          "PackageIdentifier": "Klocman.BulkCrapUninstaller"
+        },
+        {
+          "PackageIdentifier": "AIMP.AIMP"
+        },
+        {
+          "PackageIdentifier": "Mozilla.Firefox"
+        },
+        {
+          "PackageIdentifier": "Google.Chrome.EXE"
+        },
+        {
+          "PackageIdentifier": "Valve.Steam"
+        },
+        {
+          "PackageIdentifier": "Skillbrains.Lightshot"
+        },
+        {
+          "PackageIdentifier": "Telegram.TelegramDesktop"
+        },
+        {
+          "PackageIdentifier": "Microsoft.VisualStudioCode"
+        },
+        {
+          "PackageIdentifier": "mpv.net"
+        }
+      ],
+      "SourceDetails": {
+        "Argument": "https://cdn.winget.microsoft.com/cache",
+        "Identifier": "Microsoft.Winget.Source_8wekyb3d8bbwe",
+        "Name": "winget",
+        "Type": "Microsoft.PreIndexed.Package"
+      }
+    }
+  ],
+  "WinGetVersion": "1.12.460"
+}
