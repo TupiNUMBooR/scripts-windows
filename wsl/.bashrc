@@ -115,3 +115,7 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
+
+# alias
+alias ffmpeg='ffmpeg -hide_banner'
+alias ffmpeg='ffprobe -hide_banner'
