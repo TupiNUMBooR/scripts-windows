@@ -5,6 +5,11 @@ image="$1"
 music="$2"
 output="$3.mp3"
 
+if [[ -f "$output" ]]; then
+  read -rp "File $output exists. Overwrite? [y/N] " ans
+  [[ $ans == [Yy]* ]] || exit 1
+fi
+
 tmp_cover=$(mktemp --suffix=.jpg)
 
 ffmpeg -hide_banner -y \

@@ -11,7 +11,7 @@ music="$2"
 output="$3.mp4"
 
 if [[ -f "$output" ]]; then
-  read -rp "File exists. Overwrite? [y/N] " ans
+  read -rp "File $output exists. Overwrite? [y/N] " ans
   [[ $ans == [Yy]* ]] || exit 1
 fi
 
