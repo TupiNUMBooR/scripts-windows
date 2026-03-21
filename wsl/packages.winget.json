@@ -33,9 +33,6 @@
         },
         {
           "PackageIdentifier": "Microsoft.VisualStudioCode"
-        },
-        {
-          "PackageIdentifier": "mpv.net"
         }
       ],
       "SourceDetails": {
