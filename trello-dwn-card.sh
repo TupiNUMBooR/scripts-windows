@@ -12,21 +12,32 @@ source .env
 
 API="https://api.trello.com/1"
 
-mkdir -p tmp out
+OUT_DIR="./trello-backuper"
+
+mkdir -p "$OUT_DIR"
 
 echo "[*] Fetching comments for card $CARD_ID..."
 
-curl -s "$API/cards/$CARD_ID/actions?filter=commentCard&key=$TRELLO_KEY&token=$TRELLO_TOKEN" \
-  | jq -r '.[] | [.date, .data.text] | @tsv' \
-  > "tmp/$CARD_ID.tsv"
+RESPONSE=$(curl -s "$API/cards/$CARD_ID/actions?filter=commentCard&key=$TRELLO_KEY&token=$TRELLO_TOKEN")
+
+if ! echo "$RESPONSE" | jq empty >/dev/null 2>&1; then
+  echo "[!] Error: Failed to parse JSON response"
+  echo "$RESPONSE"
+  exit 1
+fi
+
+echo "$RESPONSE" \
+  | jq -r 'reverse[] | [.date, .data.text] | @tsv' \
+  > "$OUT_DIR/$CARD_ID.tsv"
 
 echo "[*] Converting to markdown..."
 
 while IFS=$'\t' read -r date text; do
   day=$(echo "$date" | cut -d'T' -f1)
-  file="out/$day.md"
+  time=$(echo "$date" | cut -d'T' -f2 | cut -d'.' -f1)
+  file="$OUT_DIR/$day-trello.md"
 
-  echo -e "\n$text" >> "$file"
-done < "tmp/$CARD_ID.tsv"
+  echo -e "\n### $time\n\n$text" >> "$file"
+done < "$OUT_DIR/$CARD_ID.tsv"
 
-echo "[✓] Done. Files in ./out/"
+echo "[✓] Done. Files in $OUT_DIR/"
