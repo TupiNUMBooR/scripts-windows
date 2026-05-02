@@ -9,6 +9,6 @@ fi
 
 git init
 git remote add origin git@github.com:TupiNUMBooR/$1
-# git branch -M dev
-git push -u origin main
+git branch -M dev
+git push -u origin dev
 
