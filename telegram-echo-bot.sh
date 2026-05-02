@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-. .env
-
 : "${TELEGRAM_BOT_TOKEN:?}"
 
 offset=0
