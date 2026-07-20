@@ -1,7 +1,12 @@
-.idea
-.venv
+# IDE
+.idea/
+
+# Local environment
 .env
 .env.legacy
 cache.sqlite3
+
+# basher runtime artifacts
 .ask-ai/
 cost.txt
+dialogue.json
