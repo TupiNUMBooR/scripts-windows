@@ -1,29 +1,129 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 # cv-avif.sh
-shopt -s globstar nocaseglob
-path=${1:-.}
-max_procs=${2:-8}
 
-echo "cv-avif $path $max_procs"
-echo -e "Looking for files in \033[92m$path\033[0m"
-files=$(find . -type f -regextype posix-extended -iregex '.*\.(jpe?g|png|webp|bmp)' | wc -l)
-echo -e "Files count: \033[92m$files\033[0m"
-echo -e "Max parallel processes is \033[92m$max_procs\033[0m"
+shopt -s globstar nocaseglob nullglob
 
-[ "$path" == "." ] && read -p "Enter to continue, Ctrl-C to abort..."
-((i=0)) || :
+SCRIPT_NAME="$(basename "$0")"
 
-cv() {
-  [ ! -f "$f" ] && return
-  ((++i >= "$max_procs")) && wait -n || sleep 0.01
-  echo "$i $1"
-  magick "$1" "${1%.*}.avif" && rm "$1" && echo "$i ok" &
+DEFAULT_PATH="."
+DEFAULT_MAX_PROCS=8
+
+GREEN='\033[92m'
+RED='\033[91m'
+RESET='\033[0m'
+
+# region functions
+
+usage() {
+  cat <<EOF
+$SCRIPT_NAME - recursively convert images to AVIF.
+
+Converts JPEG, PNG, WebP, and BMP files using ImageMagick.
+After a successful conversion, the original file is deleted.
+
+Usage:
+  $SCRIPT_NAME [directory] [max_processes]
+  $SCRIPT_NAME -h|--help
+
+Arguments:
+  directory       Directory to process. Default: $DEFAULT_PATH
+  max_processes   Maximum parallel conversions. Default: $DEFAULT_MAX_PROCS
+
+Examples:
+  $SCRIPT_NAME
+  $SCRIPT_NAME ./images
+  $SCRIPT_NAME ./images 4
+
+Requires:
+  magick
+EOF
 }
 
-for f in "$path"/**/*.{jp{,e}g,png,webp,bmp}; do
-  cv "$f"
-done
-echo wait && wait
-echo finish
+convert_file() {
+  local source="$1"
+  local output="${source%.*}.avif"
+  local number="$2"
+
+  echo -e "[$number] $source"
+
+  if magick "$source" "$output"; then
+    rm -- "$source"
+    echo -e "[$number] ${GREEN}ok${RESET}"
+  else
+    echo -e "[$number] ${RED}failed${RESET}" >&2
+    return 1
+  fi
+}
+
+# endregion
+
+main() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+  fi
+
+  local path="${1:-$DEFAULT_PATH}"
+  local max_procs="${2:-$DEFAULT_MAX_PROCS}"
+
+  [[ -d "$path" ]] || {
+    echo -e "${RED}Error:${RESET} directory does not exist: $path" >&2
+    exit 66
+  }
+
+  [[ "$max_procs" =~ ^[1-9][0-9]*$ ]] || {
+    echo -e "${RED}Error:${RESET} max_processes must be a positive integer" >&2
+    exit 65
+  }
+
+  command -v magick >/dev/null 2>&1 || {
+    echo -e "${RED}Error:${RESET} magick is not installed" >&2
+    exit 127
+  }
+
+  echo -e "Looking for files in ${GREEN}$path${RESET}"
+
+  local files
+  files="$(
+    find "$path" \
+      -type f \
+      -regextype posix-extended \
+      -iregex '.*\.(jpe?g|png|webp|bmp)' \
+      | wc -l
+  )"
+
+  if ((files == 0)); then
+    echo "No matching files found."
+    exit 0
+  fi
+
+  echo -e "Files count: ${GREEN}$files${RESET}"
+  echo -e "Max parallel processes: ${GREEN}$max_procs${RESET}"
+
+  read -r -p "Enter to continue, Ctrl-C to abort..."
+
+  local active=0
+  local index=0
+  local file
+
+  for file in "$path"/**/*.{jpg,jpeg,png,webp,bmp}; do
+    ((++index))
+
+    convert_file "$file" "$index" &
+
+    ((++active))
+
+    if ((active >= max_procs)); then
+      wait -n || :
+      ((--active))
+    fi
+  done
+
+  echo "Waiting for remaining conversions..."
+  wait
+
+  echo -e "${GREEN}Finished.${RESET}"
+}
+
+main "$@"
