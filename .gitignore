@@ -1,6 +1,7 @@
 .idea
 .venv
-.env*
+.env
+.env.legacy
 cache.sqlite3
 .ask-ai/
 cost.txt
