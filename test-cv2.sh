@@ -51,7 +51,10 @@ expect_status() {
 }
 
 assert_file() {
-  [[ -f "$1" && -s "$1" ]]
+  [[ -f "$1" && -s "$1" ]] || {
+    printf 'Assertion failed: expected non-empty file: %s\n' "$1" >&2
+    return 1
+  }
 }
 
 assert_dir() {
@@ -61,7 +64,18 @@ assert_dir() {
 assert_text() {
   local file="$1"
   local expected="$2"
-  [[ "$(cat -- "$file")" == "$expected" ]]
+  local actual
+
+  [[ -f "$file" ]] || {
+    printf 'Assertion failed: expected file: %s\n' "$file" >&2
+    return 1
+  }
+
+  actual="$(cat -- "$file")"
+  [[ "$actual" == "$expected" ]] || {
+    printf 'Assertion failed: %s contains %q, expected %q\n' "$file" "$actual" "$expected" >&2
+    return 1
+  }
 }
 
 assert_audio_decodes() {
@@ -114,13 +128,25 @@ image_size() {
 assert_image_format() {
   local file="$1"
   local expected="$2"
-  [[ "$(magick identify -format '%m' "$file")" == "$expected" ]]
+  local actual
+
+  actual="$(magick identify -format '%m' "${file}[0]")" || return 1
+  [[ "$actual" == "$expected" ]] || {
+    printf 'Assertion failed: %s format is %s, expected %s\n' "$file" "$actual" "$expected" >&2
+    return 1
+  }
 }
 
 assert_image_size() {
   local file="$1"
   local expected="$2"
-  [[ "$(magick identify -format '%wx%h' "$file")" == "$expected" ]]
+  local actual
+
+  actual="$(magick identify -format '%wx%h' "${file}[0]")" || return 1
+  [[ "$actual" == "$expected" ]] || {
+    printf 'Assertion failed: %s size is %s, expected %s\n' "$file" "$actual" "$expected" >&2
+    return 1
+  }
 }
 
 make_fixtures() {
@@ -196,7 +222,7 @@ case_images() {
     assert_image_format output/input/images/nested/b.converted.jpg JPEG &&
     assert_image_size output/input/images/nested/b.converted.jpg 40x30 &&
     assert_image_format output/input/images/nested/c.converted.png PNG &&
-    assert_image_format output/input/images/a.converted.avif HEIC
+    assert_image_format output/input/images/a.converted.avif AVIF
 }
 
 case_audio() {
@@ -301,7 +327,7 @@ case_zip_skip() {
 case_unzip() {
   cd "$WORK_DIR"
   "$CV2" -y -o extracted -s unpacked unzip archives/input/files/nested.packed.zip
-  assert_text extracted/archives/input/files/nested.packed.unpacked/b.txt beta
+  assert_text extracted/archives/input/files/nested.packed.unpacked/input/files/nested/b.txt beta
 }
 
 case_7z() {
@@ -319,7 +345,7 @@ case_7z_skip() {
 case_un7z() {
   cd "$WORK_DIR"
   "$CV2" -y -o extracted -s unpacked un7z archives/input/files/nested.packed.7z
-  assert_text extracted/archives/input/files/nested.packed.unpacked/b.txt beta
+  assert_text extracted/archives/input/files/nested.packed.unpacked/input/files/nested/b.txt beta
 }
 
 case_7zp() {
