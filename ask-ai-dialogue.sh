@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-# ask-ai-text.sh
+# ask-ai-dialogue.sh
 
 SCRIPT_NAME="$(basename "$0")"
 
@@ -22,19 +22,19 @@ PAID_PHASE=0
 
 usage() {
   cat <<EOF
-$SCRIPT_NAME — sends text to the OpenAI text API.
+$SCRIPT_NAME — sends a message array to the OpenAI text API.
 
-Reads text from a file, a literal argument, or standard input.
-Writes only the assistant response text to standard output and stores request
-metadata, responses, and cost data in configured files.
+Reads a JSON array of conversation messages from a file, a literal argument,
+or standard input. Writes only the assistant response text to standard output
+and stores request metadata, responses, and cost data in configured files.
 
 Usage:
-  $SCRIPT_NAME [text_file|text]
+  $SCRIPT_NAME [messages.json|messages_json]
   $SCRIPT_NAME -h|--help
 
 Input:
   With one argument, the value is treated as a file when that file exists;
-  otherwise it is treated as literal text. With no arguments, text is read
+  otherwise it is treated as literal JSON. With no arguments, JSON is read
   from standard input.
 
 Environment:
@@ -51,12 +51,12 @@ Exit codes:
   66   Required input is missing.
   69   API is unavailable.
   127  Required command is unavailable.
-  13   Paid API phase error.
+  13   Paid API phase error. 
 
 Examples:
-  $SCRIPT_NAME prompt.txt
-  $SCRIPT_NAME 'Explain why the sky is blue.'
-  printf '%s\n' 'Explain why the sky is blue.' | $SCRIPT_NAME
+  $SCRIPT_NAME messages.json
+  $SCRIPT_NAME '[{"role":"user","content":"Hello"}]'
+  printf '%s\n' '[{"role":"user","content":"Hello"}]' | $SCRIPT_NAME
 
 More info:
   https://developers.openai.com/api/docs/guides/text?lang=curl
@@ -157,6 +157,31 @@ load_model_prices() {
   esac
 }
 
+validate_messages() {
+  local json_input="$1"
+
+  jq -c '
+    if type == "array" then
+      .
+    else
+      error("Input must be a messages array")
+    end
+  ' <<<"$json_input"
+}
+
+assert_messages_shape() {
+  local messages="$1"
+
+  jq -e '
+    type == "array"
+    and length > 0
+    and all(.[]; type == "object")
+    and all(.[]; (.role | type == "string"))
+    and all(.[]; has("content"))
+    and all(.[]; (.content != null))
+  ' <<<"$messages" >/dev/null
+}
+
 extract_output_text() {
   local response_file="$1"
 
@@ -190,11 +215,9 @@ append_cost() {
 extract_cost() {
   local response_file="$1"
 
-  local input_price
-  local cached_price
-  local output_price
-
-  read -r input_price cached_price output_price < <(load_model_prices)
+  local input_price="$2"
+  local cached_price="$3"
+  local output_price="$4"
 
   jq -r \
     --arg input_price "$input_price" \
@@ -225,8 +248,18 @@ extract_cost() {
 extract_and_append_cost() {
   local response_file="$1"
 
+  local input_price="$2"
+  local cached_price="$3"
+  local output_price="$4"
+
   local cost
-  cost="$(extract_cost "$response_file")"
+  cost="$(
+    extract_cost \
+      "$response_file" \
+      "$input_price" \
+      "$cached_price" \
+      "$output_price"
+  )"
 
   if [[ -n "$cost" ]]; then
     append_cost "text" "$cost"
@@ -244,13 +277,23 @@ main() {
   fi
 
   need_commands jq curl
-  [[ -n "$OPENAI_API_KEY" ]] || die 66 "OPENAI_API_KEY is not set"
 
-  local input_text
-  input_text="$(read_input "$@")"
+  local json_input
+  json_input="$(read_input "$@")"
 
-  [[ -n "${input_text//[[:space:]]/}" ]] || die 66 "Empty text input"
-  ((${#input_text} <= MAX_CHARS)) || die 65 "Text input too long (${#input_text} > $MAX_CHARS)"
+  [[ -n "${json_input//[[:space:]]/}" ]] || die 66 "Empty JSON input"
+  ((${#json_input} <= MAX_CHARS)) || die 65 "JSON input too long (${#json_input} > $MAX_CHARS)"
+
+  local messages
+  messages="$(validate_messages "$json_input")" || die 65 "Invalid JSON messages"
+
+  assert_messages_shape "$messages" || die 65 "Messages must be non-empty objects with role and content"
+
+  local input_price
+  local cached_price
+  local output_price
+
+  read -r input_price cached_price output_price < <(load_model_prices)
 
   mkdir -p "$ASK_AI_DIR"
 
@@ -264,7 +307,7 @@ main() {
   payload="$(
     jq -n \
       --arg model "$OPENAI_TEXT_MODEL" \
-      --arg input "$input_text" \
+      --argjson input "$messages" \
       '{
         model: $model,
         input: $input
@@ -277,7 +320,10 @@ main() {
   tmp_response="$(mktemp)"
   trap "rm -f '$tmp_response'" EXIT
 
-  log "request text: model=$OPENAI_TEXT_MODEL chars=${#input_text}"
+  local message_count
+  message_count="$(jq 'length' <<<"$messages")"
+
+  log "request text: model=$OPENAI_TEXT_MODEL messages=$message_count chars=${#json_input}"
 
   PAID_PHASE=1
 
@@ -316,7 +362,11 @@ main() {
 
   [[ -n "${text//[[:space:]]/}" && "$text" != "null" ]] || die 65 "No output text found, saved response: $response_file"
 
-  extract_and_append_cost "$tmp_response"
+  extract_and_append_cost \
+    "$tmp_response" \
+    "$input_price" \
+    "$cached_price" \
+    "$output_price"
 
   printf '%s\n' "$text"
 }
