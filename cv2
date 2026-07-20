@@ -92,15 +92,31 @@ Resolution:
   Images  Passed directly to ImageMagick, for example: x720, 1920x1080, 50%
   Video   Target height: 480p, 720p, 1080p, 1440p, or 2160p
 
-Quality defaults:
-  264       CRF 23
-  265       CRF 28
-  10bit     CRF 28
-  vcrop     CRF 28
-  jpg       quality 90
-  avif      quality 60
-  mp3       VBR quality 2 (lower is better)
-  ogg       Vorbis quality 6
+Quality:
+  -q is passed only when explicitly specified.
+
+  Command   Meaning                         Useful values
+  264       H.264 CRF; lower is better      18 high, 23 default, 28 small
+  265       H.265 CRF; lower is better      20 high, 28 default, 32 small
+  10bit     H.265 CRF; lower is better      20 high, 28 default, 32 small
+  vcrop     H.265 CRF; lower is better      20 high, 28 default, 32 small
+  jpg       quality 0-100; higher is better 60 small, 85 good, 95 high
+  avif      quality 0-100; higher is better 40 small, 60 good, 80 high
+  mp3       VBR quality 0-9; lower is better 0 best, 2 good, 4 smaller
+  ogg       Vorbis quality -1-10; higher is better
+                                             4 good, 6 high, 8 very high
+
+  Expected defaults when -q is omitted:
+    264       CRF 23
+    265       CRF 28
+    10bit     CRF 28
+    vcrop     CRF 28
+    jpg       ImageMagick default
+    avif      ImageMagick default
+    mp3       FFmpeg/libmp3lame default
+    ogg       FFmpeg/libvorbis default
+
+  Defaults are reference values only; cv2 does not pass them explicitly.
 
 Examples:
   $SCRIPT_NAME jpg -q 88 -r 50% -o converted images/*.png
@@ -530,38 +546,35 @@ parse_args() {
 convert_video() {
   local source="$1"
   local target
-  local q
   local scale=""
+  local crop
   local overwrite=()
   local filters=()
+  local quality_args=()
   local cmd=()
 
   "$yes" && overwrite=(-y)
   [[ -z "$resolution" ]] || scale="$(video_scale_args "$resolution")"
+  [[ -z "$quality" ]] || quality_args=(-crf "$quality")
 
   case "$command_name" in
     264)
-      q="${quality:-23}"
       target="$(media_output_path "$source" mp4)"
       [[ -z "$scale" ]] || filters=(-vf "$scale")
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx264 -preset slow -crf "$q" -c:a aac -pix_fmt yuv420p -movflags +faststart "${filters[@]}" "$target")
+      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx264 -preset slow "${quality_args[@]}" -c:a aac -pix_fmt yuv420p -movflags +faststart "${filters[@]}" "$target")
       ;;
     265)
-      q="${quality:-28}"
       target="$(media_output_path "$source" mkv)"
       [[ -z "$scale" ]] || filters=(-vf "$scale")
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 -crf "$q" -c:a libopus -pix_fmt yuv420p "${filters[@]}" "$target")
+      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 "${quality_args[@]}" -c:a libopus -pix_fmt yuv420p "${filters[@]}" "$target")
       ;;
     10bit)
-      q="${quality:-28}"
       target="$(media_output_path "$source" mkv)"
       [[ -z "$scale" ]] || filters=(-vf "$scale")
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 -crf "$q" -c:a libopus -pix_fmt yuv420p10le "${filters[@]}" "$target")
+      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 "${quality_args[@]}" -c:a libopus -pix_fmt yuv420p10le "${filters[@]}" "$target")
       ;;
     vcrop)
-      q="${quality:-28}"
       target="$(media_output_path "$source" crop.mkv)"
-      local crop
       local detect=(ffmpeg -hide_banner -ss 10 -i "$source" -frames:v 2 -vf cropdetect -f null -)
 
       if "$dry_run"; then
@@ -578,7 +591,7 @@ convert_video() {
 
       filters=("$crop")
       [[ -z "$scale" ]] || filters+=("$scale")
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 -crf "$q" -c:a libopus -pix_fmt yuv420p -vf "$(IFS=,; echo "${filters[*]}")" "$target")
+      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 "${quality_args[@]}" -c:a libopus -pix_fmt yuv420p -vf "$(IFS=,; echo "${filters[*]}")" "$target")
       ;;
     vstrip)
       target="$(media_output_path "$source" "strip.${source##*.}")"
@@ -607,7 +620,6 @@ convert_video() {
   prepare_output "$source" "$target" || return $?
   run_command "${cmd[@]}"
 }
-
 # endregion
 
 # region audio functions
@@ -615,30 +627,19 @@ convert_video() {
 convert_audio() {
   local source="$1"
   local target
-  local q
   local overwrite=()
+  local quality_args=()
   local cmd=()
 
   "$yes" && overwrite=(-y)
+  [[ -z "$quality" ]] || quality_args=(-q:a "$quality")
 
   case "$command_name" in
-    mp3)
-      q="${quality:-2}"
-      target="$(media_output_path "$source" mp3)"
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0:a:0 -map '0:v?' -c:a libmp3lame -q:a "$q" -c:v copy "$target")
-      ;;
-    flac)
-      target="$(media_output_path "$source" flac)"
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0:a:0 -map '0:v?' -c:a flac -c:v copy "$target")
-      ;;
-    ogg)
-      q="${quality:-6}"
-      target="$(media_output_path "$source" ogg)"
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0:a:0 -c:a libvorbis -q:a "$q" "$target")
-      ;;
-    wav)
-      target="$(media_output_path "$source" wav)"
-      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0:a:0 -c:a pcm_s16le "$target")
+    mp3|flac|ogg|wav)
+      target="$(media_output_path "$source" "$command_name")"
+      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source")
+      [[ "$command_name" == mp3 || "$command_name" == ogg ]] && cmd+=("${quality_args[@]}")
+      cmd+=("$target")
       ;;
     opus)
       target="$(media_output_path "$source" opus)"
@@ -671,7 +672,6 @@ convert_audio() {
   prepare_output "$source" "$target" || return $?
   run_command "${cmd[@]}"
 }
-
 # endregion
 
 # region image functions
@@ -679,30 +679,17 @@ convert_audio() {
 convert_image() {
   local source="$1"
   local target
-  local q
   local extension="$command_name"
   local cmd=(magick "$source")
 
   target="$(media_output_path "$source" "$extension")"
   [[ -z "$resolution" ]] || cmd+=(-resize "$resolution")
-
-  case "$command_name" in
-    jpg)
-      q="${quality:-90}"
-      cmd+=(-quality "$q")
-      ;;
-    avif)
-      q="${quality:-60}"
-      cmd+=(-quality "$q")
-      ;;
-  esac
-
+  [[ -z "$quality" ]] || cmd+=(-quality "$quality")
   cmd+=("$target")
 
   prepare_output "$source" "$target" || return $?
   run_command "${cmd[@]}"
 }
-
 # endregion
 
 # region archive functions
