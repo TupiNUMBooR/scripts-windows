@@ -208,10 +208,16 @@ normalize_suffix() {
 
 relative_input_path() {
   local path="$1"
+
+  while [[ "$path" != "/" && "$path" == */ ]]; do
+    path="${path%/}"
+  done
+
   path="${path#/}"
   while [[ "$path" == ./* ]]; do
     path="${path#./}"
   done
+
   printf '%s' "$path"
 }
 
@@ -265,9 +271,14 @@ copy_output_path() {
 archive_output_path() {
   local source="$1"
   local extension="$2"
+  local normalized="$source"
   local relative
 
-  relative="$(relative_input_path "$source")"
+  while [[ "$normalized" != "/" && "$normalized" == */ ]]; do
+    normalized="${normalized%/}"
+  done
+
+  relative="$(relative_input_path "$normalized")"
   printf '%s/%s%s.%s' "$output_dir" "$relative" "$suffix" "$extension"
 }
 
@@ -531,19 +542,19 @@ convert_video() {
   case "$command_name" in
     264)
       q="${quality:-23}"
-      target="$(media_output_path "$source" 264.mp4)"
+      target="$(media_output_path "$source" mp4)"
       [[ -z "$scale" ]] || filters=(-vf "$scale")
       cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx264 -preset slow -crf "$q" -c:a aac -pix_fmt yuv420p -movflags +faststart "${filters[@]}" "$target")
       ;;
     265)
       q="${quality:-28}"
-      target="$(media_output_path "$source" 265.mkv)"
+      target="$(media_output_path "$source" mkv)"
       [[ -z "$scale" ]] || filters=(-vf "$scale")
       cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 -crf "$q" -c:a libopus -pix_fmt yuv420p "${filters[@]}" "$target")
       ;;
     10bit)
       q="${quality:-28}"
-      target="$(media_output_path "$source" 10bit.mkv)"
+      target="$(media_output_path "$source" mkv)"
       [[ -z "$scale" ]] || filters=(-vf "$scale")
       cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source" -map 0 -c copy -c:v libx265 -crf "$q" -c:a libopus -pix_fmt yuv420p10le "${filters[@]}" "$target")
       ;;
