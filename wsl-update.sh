@@ -13,8 +13,6 @@ sync_newer() {
   [[ $a -nt $b ]] && { cp -f "$a" "$b"; echo "sync: $a -> $b"; } || { cp -f "$b" "$a"; echo "sync: $b -> $a"; }
 }
 
-. .env
-
 SCRIPTS_DIR="$(dirname "$0")"
 WSL_FILES_DIR="$SCRIPTS_DIR/wsl"
 
@@ -25,20 +23,12 @@ cp "$WSL_FILES_DIR/gallery-dl.conf" ~/.config/gallery-dl/config.json
 
 sync_newer "$WSL_FILES_DIR/cache.sqlite3" ~/.cache/gallery-dl/cache.sqlite3
 
-u=${USER?}
-if [[ ! -e ~/.gitconfig && -f "/mnt/c/Users/$u/.gitconfig" ]]; then
-  ln -s "/mnt/c/Users/$u/.gitconfig" ~/.gitconfig
-fi
-
-git config --global init.defaultBranch dev
-git config --global push.autoSetupRemote true
-git config --global core.autocrlf input
-
 pacman -Sy --needed --ask=4 archlinux-keyring
 pacman -Su --ask=4
-pacman -S --needed --ask=4 - < "$WSL_FILES_DIR/packages.txt"
+pacman -S --needed --ask=4 - < "$WSL_FILES_DIR/packages.pacman.txt"
 
 pipx install gallery-dl
+pipx upgrade gallery-dl
 pipx ensurepath
 
 if ! locale -a | grep -qx 'en_US.utf8'; then
