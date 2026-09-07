@@ -4,6 +4,14 @@ set -Eeuo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 
+# Load project configuration from the repository root when present.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+  # shellcheck disable=SC1091
+  source "$PROJECT_DIR/.env"
+fi
+
 ASK_AI_DIR="${ASK_AI_DIR:-./.ask-ai}"
 COST_FILE="${COST_FILE:-./cost.txt}"
 
@@ -41,6 +49,7 @@ Arguments:
   text         Text to synthesize.
 
 Environment:
+  .env                         Optional repository-root configuration loaded when present.
   OPENAI_API_KEY               Required OpenAI API key.
   OPENAI_TTS_INSTRUCTIONS      Optional voice/style instructions.
   OPENAI_TTS_MODEL             TTS model. Default: gpt-4o-mini-tts

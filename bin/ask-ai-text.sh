@@ -4,6 +4,14 @@ set -Eeuo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 
+# Load project configuration from the repository root when present.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+  # shellcheck disable=SC1091
+  source "$PROJECT_DIR/.env"
+fi
+
 ASK_AI_DIR="${ASK_AI_DIR:-./.ask-ai}"
 COST_FILE="${COST_FILE:-./cost.txt}"
 
@@ -38,6 +46,7 @@ Input:
   from standard input.
 
 Environment:
+  .env               Optional repository-root configuration loaded when present.
   OPENAI_API_KEY     Required OpenAI API key.
   OPENAI_TEXT_MODEL  Text model. Default: gpt-5.6-luna
   ASK_AI_DIR         Request/response directory. Default: ./.ask-ai
