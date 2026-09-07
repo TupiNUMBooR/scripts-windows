@@ -20,6 +20,9 @@
           "PackageIdentifier": "CrystalDewWorld.CrystalDiskMark"
         },
         {
+          "PackageIdentifier": "CrystalDewWorld.CrystalDiskInfo"
+        },
+        {
           "PackageIdentifier": "Cryptomator.Cryptomator"
         },
         {
@@ -41,6 +44,9 @@
           "PackageIdentifier": "FastStone.Viewer"
         },
         {
+          "PackageIdentifier": "Geeks3D.FurMark"
+        },
+        {
           "PackageIdentifier": "Git.Git"
         },
         {
@@ -48,6 +54,9 @@
         },
         {
           "PackageIdentifier": "Google.PlatformTools"
+        },
+        {
+          "PackageIdentifier": "REALiX.HWiNFO"
         },
         {
           "PackageIdentifier": "Klocman.BulkCrapUninstaller"
