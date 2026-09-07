@@ -2,8 +2,6 @@
 set -euo pipefail
 # cv-avif.sh
 
-shopt -s globstar nocaseglob nullglob
-
 SCRIPT_NAME="$(basename "$0")"
 
 DEFAULT_PATH="."
@@ -84,21 +82,21 @@ main() {
 
   echo -e "Looking for files in ${GREEN}$path${RESET}"
 
-  local files
-  files="$(
+  local -a files=()
+  mapfile -d '' -t files < <(
     find "$path" \
       -type f \
       -regextype posix-extended \
       -iregex '.*\.(jpe?g|png|webp|bmp)' \
-      | wc -l
-  )"
+      -print0
+  )
 
-  if ((files == 0)); then
+  if ((${#files[@]} == 0)); then
     echo "No matching files found."
     exit 0
   fi
 
-  echo -e "Files count: ${GREEN}$files${RESET}"
+  echo -e "Files count: ${GREEN}${#files[@]}${RESET}"
   echo -e "Max parallel processes: ${GREEN}$max_procs${RESET}"
 
   read -r -p "Enter to continue, Ctrl-C to abort..."
@@ -107,7 +105,7 @@ main() {
   local index=0
   local file
 
-  for file in "$path"/**/*.{jpg,jpeg,png,webp,bmp}; do
+  for file in "${files[@]}"; do
     ((++index))
 
     convert_file "$file" "$index" &
