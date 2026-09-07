@@ -1,12 +1,18 @@
-# IDE
+## IDE
+.vscode/
 .idea/
+.agents/
+.codex/
 
-# Local environment
-.env
-.env.legacy
+## Runtime
+.env*
 cache.sqlite3
 
-# basher runtime artifacts
+## Basher
 .ask-ai/
 cost.txt
 dialogue.json
+
+## User files
+user/
+*.zip
