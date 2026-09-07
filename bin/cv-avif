@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
-set -euo pipefail
-# cv-avif.sh
+set -Eeuo pipefail
+# cv-avif
 
 SCRIPT_NAME="$(basename "$0")"
 
 DEFAULT_PATH="."
 DEFAULT_MAX_PROCS=8
 
-GREEN='\033[92m'
-RED='\033[91m'
-RESET='\033[0m'
-
 # region functions
 
 usage() {
   cat <<EOF
-$SCRIPT_NAME - recursively convert images to AVIF.
+  $SCRIPT_NAME - recursively convert images to AVIF.
 
 Converts JPEG, PNG, WebP, and BMP files using ImageMagick.
 After a successful conversion, the original file is deleted.
@@ -35,7 +31,49 @@ Examples:
 
 Requires:
   magick
+
+Exit codes:
+  0    Completed successfully.
+  2    Invalid command-line arguments.
+  65   Invalid input data.
+  66   Required input is missing.
+  127  Required command is unavailable.
 EOF
+}
+
+handle_help() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+  fi
+}
+
+log() {
+  printf '[%s] [%s] %s\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    "$SCRIPT_NAME" \
+    "$*" >&2
+}
+
+warn() {
+  log "[WARN] $*"
+}
+
+error() {
+  local code="$1"
+  shift
+
+  log "[ERROR] $*"
+  exit "$code"
+}
+
+need_commands() {
+  local name
+
+  for name in "$@"; do
+    command -v "$name" >/dev/null 2>&1 \
+      || error 127 "Missing executable: $name"
+  done
 }
 
 convert_file() {
@@ -43,13 +81,13 @@ convert_file() {
   local output="${source%.*}.avif"
   local number="$2"
 
-  echo -e "[$number] $source"
+  log "[$number] converting: $source"
 
   if magick "$source" "$output"; then
     rm -- "$source"
-    echo -e "[$number] ${GREEN}ok${RESET}"
+    log "[$number] completed: $output"
   else
-    echo -e "[$number] ${RED}failed${RESET}" >&2
+    warn "[$number] failed: $source"
     return 1
   fi
 }
@@ -57,30 +95,21 @@ convert_file() {
 # endregion
 
 main() {
-  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    usage
-    exit 0
-  fi
+  handle_help "$@"
+
+  [[ $# -le 2 ]] || error 2 "Expected at most directory and max_processes"
 
   local path="${1:-$DEFAULT_PATH}"
   local max_procs="${2:-$DEFAULT_MAX_PROCS}"
 
-  [[ -d "$path" ]] || {
-    echo -e "${RED}Error:${RESET} directory does not exist: $path" >&2
-    exit 66
-  }
+  [[ -d "$path" ]] || error 66 "Directory does not exist: $path"
 
-  [[ "$max_procs" =~ ^[1-9][0-9]*$ ]] || {
-    echo -e "${RED}Error:${RESET} max_processes must be a positive integer" >&2
-    exit 65
-  }
+  [[ "$max_procs" =~ ^[1-9][0-9]*$ ]] \
+    || error 65 "max_processes must be a positive integer"
 
-  command -v magick >/dev/null 2>&1 || {
-    echo -e "${RED}Error:${RESET} magick is not installed" >&2
-    exit 127
-  }
+  need_commands date find magick
 
-  echo -e "Looking for files in ${GREEN}$path${RESET}"
+  log "Looking for files in $path"
 
   local -a files=()
   mapfile -d '' -t files < <(
@@ -92,14 +121,14 @@ main() {
   )
 
   if ((${#files[@]} == 0)); then
-    echo "No matching files found."
+    log "No matching files found."
     exit 0
   fi
 
-  echo -e "Files count: ${GREEN}${#files[@]}${RESET}"
-  echo -e "Max parallel processes: ${GREEN}$max_procs${RESET}"
+  log "Files count: ${#files[@]}"
+  log "Max parallel processes: $max_procs"
 
-  read -r -p "Enter to continue, Ctrl-C to abort..."
+  read -r -p "Enter to continue, Ctrl-C to abort... "
 
   local active=0
   local index=0
@@ -118,10 +147,10 @@ main() {
     fi
   done
 
-  echo "Waiting for remaining conversions..."
+  log "Waiting for remaining conversions..."
   wait
 
-  echo -e "${GREEN}Finished.${RESET}"
+  log "Finished."
 }
 
 main "$@"
