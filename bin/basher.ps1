@@ -7,7 +7,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $WorkDir = (Get-Location).Path
-$BasherDir = Join-Path $PSScriptRoot '..\basher'
+$BasherDir = Join-Path $PSScriptRoot '..\..\basher'
 
 $ComposeArgs = @('compose', 'run', '--rm')
 
