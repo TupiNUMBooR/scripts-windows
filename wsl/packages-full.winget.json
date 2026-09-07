@@ -47,6 +47,9 @@
           "PackageIdentifier": "GIMP.GIMP.3"
         },
         {
+          "PackageIdentifier": "Google.PlatformTools"
+        },
+        {
           "PackageIdentifier": "Klocman.BulkCrapUninstaller"
         },
         {
