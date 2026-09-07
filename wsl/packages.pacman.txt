@@ -11,6 +11,7 @@ exiv2
 fastfetch
 ffmpeg
 git
+go-yq
 htop
 id3v2
 imagemagick
@@ -37,6 +38,5 @@ unzip
 vim
 wget
 xmlstarlet
-yq
 yt-dlp
 zip
