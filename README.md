@@ -11,7 +11,6 @@ Most scripts are standalone and can be copied or added to your `PATH` individual
 | `cv2.sh` | Convert video, audio and images; create/extract archives; resize, crop, run jobs in parallel, and preserve directory structure. |
 | `ask-ai-text.sh` | Send text to the OpenAI Responses API from a file, argument, or stdin; save responses and track cost. |
 | `ask-ai-image.sh` | Generate images through the OpenAI image API and save them as PNG, WebP or JPEG. |
-| `ask-ai-dialogue.sh` | Small CLI for multi-turn AI conversations. |
 | `ask-tts.sh` | Generate speech through the OpenAI API. |
 | `yt-dlp-mp3.sh` | Download YouTube audio and create an MP3 with the video thumbnail embedded as cover art. |
 | `Update.ps1` | Bootstrap/update a Windows + WSL development environment. |
