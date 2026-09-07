@@ -8,7 +8,8 @@ fi
 
 CARD_ID="$1"
 
-source .env
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/.env"
 
 API="https://api.trello.com/1"
 

@@ -2,7 +2,7 @@
 
 A personal toolbox of small command-line utilities for Windows, WSL, media processing, AI APIs, and everyday developer tasks.
 
-Most scripts are standalone and can be copied or added to your `PATH` individually.
+Most scripts are standalone and can be copied or added to your `PATH` individually. The runnable tools live in `bin/`; `wsl/` contains WSL configuration and package lists, while `legacy/` contains retired scripts.
 
 ## Highlights
 

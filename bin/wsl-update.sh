@@ -13,7 +13,7 @@ sync_newer() {
   [[ $a -nt $b ]] && { cp -f "$a" "$b"; echo "sync: $a -> $b"; } || { cp -f "$b" "$a"; echo "sync: $b -> $a"; }
 }
 
-SCRIPTS_DIR="$(dirname "$0")"
+SCRIPTS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 WSL_FILES_DIR="$SCRIPTS_DIR/wsl"
 
 cp "$WSL_FILES_DIR/.bashrc" ~/.bashrc

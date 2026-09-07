@@ -3,7 +3,7 @@ set -uo pipefail
 # test-cv2.sh
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CV2="$SCRIPT_DIR/../cv2"
+CV2="$SCRIPT_DIR/../bin/cv2.sh"
 WORK_DIR="$(mktemp -d /tmp/test-cv2.XXXXXX)"
 
 passed=0

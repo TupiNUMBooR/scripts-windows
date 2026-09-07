@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 
 #region Variables
 
-$WslDir = Join-Path $PSScriptRoot 'wsl'
+$WslDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'wsl'
 $Distro = 'archlinux'
 
 $WingetImportArgs = @(
