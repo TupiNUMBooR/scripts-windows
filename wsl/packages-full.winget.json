@@ -1,50 +1,80 @@
 {
   "$schema": "https://aka.ms/winget-packages.schema.2.0.json",
-  "CreationDate": "2026-03-08T02:57:28.302-00:00",
+  "CreationDate": "2026-09-07T20:23:13.776-00:00",
   "Sources": [
     {
       "Packages": [
         {
-          "PackageIdentifier": "Skillbrains.Lightshot"
+          "PackageIdentifier": "Aegisub.Aegisub"
         },
         {
           "PackageIdentifier": "Audacity.Audacity"
         },
         {
-          "PackageIdentifier": "TGRMNSoftware.BulkRenameUtility"
-        },
-        {
-          "PackageIdentifier": "Docker.DockerDesktop"
-        },
-        {
           "PackageIdentifier": "BleachBit.BleachBit"
         },
         {
-          "PackageIdentifier": "FastStone.Viewer"
+          "PackageIdentifier": "BlenderFoundation.Blender"
         },
         {
-          "PackageIdentifier": "WinSCP.WinSCP"
-        },
-        {
-          "PackageIdentifier": "EpicGames.EpicGamesLauncher"
+          "PackageIdentifier": "CrystalDewWorld.CrystalDiskMark"
         },
         {
           "PackageIdentifier": "Cryptomator.Cryptomator"
         },
         {
+          "PackageIdentifier": "DBeaver.DBeaver.Community"
+        },
+        {
+          "PackageIdentifier": "Discord.Discord"
+        },
+        {
+          "PackageIdentifier": "DiskInternals.LinuxReader"
+        },
+        {
+          "PackageIdentifier": "Docker.DockerDesktop"
+        },
+        {
+          "PackageIdentifier": "EpicGames.EpicGamesLauncher"
+        },
+        {
+          "PackageIdentifier": "FastStone.Viewer"
+        },
+        {
+          "PackageIdentifier": "Git.Git"
+        },
+        {
           "PackageIdentifier": "GIMP.GIMP.3"
         },
         {
-          "PackageIdentifier": "JetBrains.Toolbox"
+          "PackageIdentifier": "Klocman.BulkCrapUninstaller"
         },
         {
-          "PackageIdentifier": "Yandex.Disk"
+          "PackageIdentifier": "Mozilla.Firefox"
+        },
+        {
+          "PackageIdentifier": "mpv.net"
+        },
+        {
+          "PackageIdentifier": "Obsidian.Obsidian"
+        },
+        {
+          "PackageIdentifier": "OpenJS.NodeJS"
+        },
+        {
+          "PackageIdentifier": "PuTTY.PuTTY"
+        },
+        {
+          "PackageIdentifier": "Skillbrains.Lightshot"
         },
         {
           "PackageIdentifier": "Telegram.TelegramDesktop"
         },
         {
-          "PackageIdentifier": "mpv.net"
+          "PackageIdentifier": "Valve.Steam"
+        },
+        {
+          "PackageIdentifier": "WinSCP.WinSCP"
         }
       ],
       "SourceDetails": {
@@ -55,5 +85,5 @@
       }
     }
   ],
-  "WinGetVersion": "1.12.460"
+  "WinGetVersion": "1.29.290"
 }
