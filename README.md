@@ -13,8 +13,8 @@ Most scripts are standalone and can be copied or added to your `PATH` individual
 | `ask-ai-image.sh` | Generate images through the OpenAI image API and save them as PNG, WebP or JPEG. |
 | `ask-tts.sh` | Generate speech through the OpenAI API. |
 | `yt-dlp-mp3.sh` | Download YouTube audio and create an MP3 with the video thumbnail embedded as cover art. |
-| `Update.ps1` | Bootstrap/update a Windows + WSL development environment. |
-| `wsl-*.sh` | Small helpers for maintaining packages and updating WSL. |
+| `bin/update.ps1` | Bootstrap/update a Windows + WSL development environment. |
+| `bin/wsl-*.sh` | Small helpers for maintaining packages and updating WSL. |
 
 There are also tiny helpers for Git, `winget`, PATH management, elevation, Trello, subtitles, passwords, and other repetitive jobs.
 
@@ -44,4 +44,4 @@ Use `cv2.sh validate` to check its external dependencies.
 
 ## Notes
 
-This repository is primarily my own working toolbox, so some scripts are intentionally opinionated or machine-specific. The `legacy/` directory contains older scripts and is not part of the current toolset.
+This repository is primarily my own working toolbox, so some scripts are intentionally opinionated or machine-specific. Runnable scripts live in `bin/`; WSL configuration lives in `wsl/`.
