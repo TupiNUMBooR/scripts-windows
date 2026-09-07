@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 # cv2
 
 SCRIPT_NAME="$(basename "$0")"
-VERSION="2026-07-20"
+VERSION="2026-09-07"
 
 DEFAULT_OUTPUT="."
 DEFAULT_PARALLEL=4
-
-EX_OK=0
-EX_USAGE=64
-EX_DATAERR=65
-EX_NOINPUT=66
-EX_CANTCREAT=73
-EX_IOERR=74
-EX_NOTFOUND=127
 
 CYAN='\033[1;36m'
 GREEN='\033[1;32m'
@@ -118,14 +110,6 @@ Quality:
 
   Defaults are reference values only; cv2 does not pass them explicitly.
 
-Examples:
-  $SCRIPT_NAME jpg -q 88 -r 50% -o converted images/*.png
-  $SCRIPT_NAME -nvo converted --parallel 15 avif images/**/*.png
-  $SCRIPT_NAME 265 -q 26 -r 1080p video.mov
-  $SCRIPT_NAME 10bit -y movie.mkv
-  $SCRIPT_NAME zip files/*
-  $SCRIPT_NAME validate
-
 Exit codes:
   0    success
   64   invalid usage
@@ -134,30 +118,50 @@ Exit codes:
   73   output cannot be created
   74   conversion or I/O failed
   127  required command not found
+
+Examples:
+  $SCRIPT_NAME jpg -q 88 -r 50% -o converted images/*.png
+  $SCRIPT_NAME -nvo converted --parallel 15 avif images/**/*.png
+  $SCRIPT_NAME 265 -q 26 -r 1080p video.mov
+  $SCRIPT_NAME 10bit -y movie.mkv
+  $SCRIPT_NAME zip files/*
+  $SCRIPT_NAME validate
 EOF_USAGE
 }
 
-error() {
-  printf '%bError:%b %s\n' "$RED" "$RESET" "$*" >&2
+handle_help() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+  fi
+}
+
+log() {
+  printf '[%s] [%s] %s\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    "$SCRIPT_NAME" \
+    "$*" >&2
 }
 
 warn() {
-  printf '%bWarning:%b %s\n' "$YELLOW" "$RESET" "$*" >&2
+  log "[WARN] $*"
+}
+
+error() {
+  log "[ERROR] $*"
 }
 
 need_commands() {
-  local missing=false
   local command
 
   for command in "$@"; do
     if ! command -v "$command" >/dev/null 2>&1; then
       error "required command not found: $command"
-      missing=true
+      return 127
     fi
   done
 
-  "$missing" && return "$EX_NOTFOUND"
-  return "$EX_OK"
+  return 0
 }
 
 record_status() {
@@ -324,12 +328,12 @@ prepare_output() {
 
   if [[ "$source" == "$target" || "./$source" == "$target" ]]; then
     error "input and output are the same: $source"
-    return "$EX_CANTCREAT"
+    return 73
   fi
 
   if [[ -e "$target" && "$yes" == false ]]; then
     error "output already exists: $target"
-    return "$EX_CANTCREAT"
+    return 73
   fi
 
   if "$dry_run"; then
@@ -337,9 +341,9 @@ prepare_output() {
   fi
 
   if "$allow_directory"; then
-    mkdir -p -- "$target" || return "$EX_CANTCREAT"
+    mkdir -p -- "$target" || return 73
   else
-    mkdir -p -- "$(dirname -- "$target")" || return "$EX_CANTCREAT"
+    mkdir -p -- "$(dirname -- "$target")" || return 73
   fi
 }
 
@@ -349,7 +353,7 @@ video_scale_args() {
 
   [[ "$value" =~ ^(480|720|1080|1440|2160)p$ ]] || {
     error "unsupported video resolution: $value"
-    return "$EX_USAGE"
+    return 2
   }
 
   height="${BASH_REMATCH[1]}"
@@ -370,17 +374,17 @@ validate_options() {
 
   if [[ -n "$quality" ]] && ! "$quality_supported"; then
     error "--quality is not supported for command '$command_name'"
-    return "$EX_USAGE"
+    return 2
   fi
 
   if [[ -n "$resolution" ]] && ! "$resolution_supported"; then
     error "--resolution is not supported for command '$command_name'"
-    return "$EX_USAGE"
+    return 2
   fi
 
   [[ "$parallel" =~ ^[1-9][0-9]*$ ]] || {
     error "--parallel must be a positive integer"
-    return "$EX_USAGE"
+    return 2
   }
 }
 
@@ -436,7 +440,7 @@ require_option_value() {
 
   [[ -n "$value" ]] || {
     error "$option requires a value"
-    return "$EX_USAGE"
+    return 2
   }
 }
 
@@ -479,7 +483,7 @@ parse_short_options() {
         ;;
       *)
         error "unknown option: -$char"
-        return "$EX_USAGE"
+        return 2
         ;;
     esac
   done
@@ -529,7 +533,7 @@ parse_args() {
         ;;
       --*)
         error "unknown option: $arg"
-        return "$EX_USAGE"
+        return 2
         ;;
       -?*)
         if parse_short_options "$arg" "${2:-}"; then
@@ -605,7 +609,7 @@ convert_video() {
 
       [[ -n "$crop" ]] || {
         error "cropdetect found no crop for: $source"
-        return "$EX_DATAERR"
+        return 65
       }
 
       filters=("$crop")
@@ -785,42 +789,44 @@ validate_commands() {
   local missing=false
   local command
 
-  echo "$SCRIPT_NAME version $VERSION"
+  log "$SCRIPT_NAME version $VERSION"
   echo
 
   for command in "${commands[@]}"; do
     if command -v "$command" >/dev/null 2>&1; then
-      echo -e "${GREEN}OK${RESET}       $command"
+      printf '%bOK%b       %s\n' "$GREEN" "$RESET" "$command"
     else
-      echo -e "${RED}MISSING${RESET}  $command"
+      printf '%bMISSING%b  %s\n' "$RED" "$RESET" "$command"
       missing=true
     fi
   done
 
-  "$missing" && return "$EX_NOTFOUND"
+  "$missing" && return 127
   echo
-  echo -e "${GREEN}All commands are available.${RESET}"
+  printf '%bAll commands are available.%b\n' "$GREEN" "$RESET"
 }
 
 # endregion
 
 main() {
+  handle_help "$@"
+
   parse_args "$@" || exit $?
 
   [[ -n "$command_name" ]] || {
     usage
-    exit "$EX_USAGE"
+    exit 2
   }
 
   case "$command_name" in
     validate)
       ((${#files[@]} == 0)) || {
         error "validate does not accept files"
-        exit "$EX_USAGE"
+        exit 2
       }
       [[ "$output_dir" == "$DEFAULT_OUTPUT" && -z "$suffix" && -z "$quality" && -z "$resolution" && "$parallel" == "$DEFAULT_PARALLEL" && "$dry_run" == false && "$verbose" == false && "$yes" == false ]] || {
         error "validate does not accept options"
-        exit "$EX_USAGE"
+        exit 2
       }
       validate_commands || exit $?
       exit 0
@@ -829,13 +835,13 @@ main() {
       ;;
     *)
       error "unknown command: $command_name"
-      exit "$EX_USAGE"
+      exit 2
       ;;
   esac
 
   ((${#files[@]} > 0)) || {
     error "no input files"
-    exit "$EX_USAGE"
+    exit 2
   }
 
   validate_options || exit $?
@@ -844,7 +850,7 @@ main() {
   for source in "${files[@]}"; do
     [[ -e "$source" ]] || {
       error "input does not exist: $source"
-      exit "$EX_NOINPUT"
+      exit 66
     }
 
     case "$command_name" in
@@ -852,7 +858,7 @@ main() {
       *)
         [[ -f "$source" ]] || {
           error "input is not a regular file: $source"
-          exit "$EX_DATAERR"
+          exit 65
         }
         ;;
     esac
@@ -909,7 +915,7 @@ main() {
 
   if "$failed"; then
     error "one or more operations failed"
-    exit "${result_code:-$EX_IOERR}"
+    exit "${result_code:-74}"
   fi
 
   printf '%bFinished.%b\n' "$GREEN" "$RESET"

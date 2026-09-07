@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -uo pipefail
-# test-cv2.sh
+# test-cv.sh
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CV2="$SCRIPT_DIR/../bin/cv2.sh"
-WORK_DIR="$(mktemp -d /tmp/test-cv2.XXXXXX)"
+CV="$SCRIPT_DIR/../bin/cv"
+WORK_DIR="$(mktemp -d /tmp/test-cv.XXXXXX)"
 
 passed=0
 failed=0
@@ -177,9 +177,9 @@ make_fixtures() {
     "$WORK_DIR/input/video/sample.mkv"
 }
 
-check_cv2() {
-  [[ -x "$CV2" ]] || {
-    echo "Expected executable next to test: $CV2" >&2
+check_cv() {
+  [[ -x "$CV" ]] || {
+    echo "Expected executable next to test: $CV" >&2
     return 1
   }
 
@@ -191,7 +191,7 @@ check_cv2() {
 
 case_cp() {
   cd "$WORK_DIR"
-  "$CV2" -vo output -s backup cp input/files/a.txt input/files/nested/b.txt
+  "$CV" -vo output -s backup cp input/files/a.txt input/files/nested/b.txt
   assert_text output/input/files/a.backup.txt alpha &&
     assert_text output/input/files/nested/b.backup.txt beta
 }
@@ -199,23 +199,23 @@ case_cp() {
 case_cp_overwrite() {
   cd "$WORK_DIR"
   printf 'old\n' > output/input/files/a.force.txt
-  "$CV2" -y -o output -s force cp input/files/a.txt
+  "$CV" -y -o output -s force cp input/files/a.txt
   assert_text output/input/files/a.force.txt alpha
 }
 
 case_dry_run() {
   cd "$WORK_DIR"
   rm -f output/input/images/a.dry.jpg
-  "$CV2" -nvo output -s dry jpg input/images/a.png
+  "$CV" -nvo output -s dry jpg input/images/a.png
   [[ ! -e output/input/images/a.dry.jpg ]]
 }
 
 case_images() {
   cd "$WORK_DIR"
-  "$CV2" -y -p 2 -o output -s converted -q 80 -r 50% jpg \
+  "$CV" -y -p 2 -o output -s converted -q 80 -r 50% jpg \
     input/images/a.png input/images/nested/b.png
-  "$CV2" -y -o output -s converted png input/images/nested/c.jpg
-  "$CV2" -y -o output -s converted -q 60 avif input/images/a.png
+  "$CV" -y -o output -s converted png input/images/nested/c.jpg
+  "$CV" -y -o output -s converted -q 60 avif input/images/a.png
 
   assert_image_format output/input/images/a.converted.jpg JPEG &&
     assert_image_size output/input/images/a.converted.jpg 32x24 &&
@@ -228,11 +228,11 @@ case_images() {
 case_audio() {
   cd "$WORK_DIR"
   # MP3 intentionally starts from a real video container. This verifies that
-  # FFmpeg selects a usable audio stream without cv2 forcing -map or -vn.
-  "$CV2" -y -p 2 -o output -s audio -q 4 mp3 input/video/sample.mkv
-  "$CV2" -y -o output -s audio flac input/audio/tone.wav
-  "$CV2" -y -o output -s audio -q 4 ogg input/audio/tone.wav
-  "$CV2" -y -o output -s audio wav input/audio/tone.wav
+  # FFmpeg selects a usable audio stream without cv forcing -map or -vn.
+  "$CV" -y -p 2 -o output -s audio -q 4 mp3 input/video/sample.mkv
+  "$CV" -y -o output -s audio flac input/audio/tone.wav
+  "$CV" -y -o output -s audio -q 4 ogg input/audio/tone.wav
+  "$CV" -y -o output -s audio wav input/audio/tone.wav
 
   assert_file output/input/video/sample.audio.mp3 &&
     assert_audio_decodes output/input/video/sample.audio.mp3 &&
@@ -247,7 +247,7 @@ case_audio() {
 
 case_opus() {
   cd "$WORK_DIR"
-  "$CV2" -y -o output -s audio opus input/audio/tone.wav
+  "$CV" -y -o output -s audio opus input/audio/tone.wav
   assert_file output/input/audio/tone.audio.opus &&
     assert_audio_decodes output/input/audio/tone.audio.opus &&
     assert_stream_codec output/input/audio/tone.audio.opus a:0 opus
@@ -255,7 +255,7 @@ case_opus() {
 
 case_video_264() {
   cd "$WORK_DIR"
-  "$CV2" -y -o output -s h264 -q 35 -r 480p 264 input/video/sample.mkv
+  "$CV" -y -o output -s h264 -q 35 -r 480p 264 input/video/sample.mkv
   assert_file output/input/video/sample.h264.mp4 &&
     assert_video_decodes output/input/video/sample.h264.mp4 &&
     assert_audio_decodes output/input/video/sample.h264.mp4 &&
@@ -267,7 +267,7 @@ case_video_264() {
 
 case_video_265() {
   cd "$WORK_DIR"
-  "$CV2" -y -o output -s h265 -q 40 265 input/video/sample.mkv
+  "$CV" -y -o output -s h265 -q 40 265 input/video/sample.mkv
   assert_file output/input/video/sample.h265.mkv &&
     assert_video_decodes output/input/video/sample.h265.mkv &&
     assert_audio_decodes output/input/video/sample.h265.mkv &&
@@ -278,7 +278,7 @@ case_video_265() {
 
 case_video_10bit() {
   cd "$WORK_DIR"
-  "$CV2" -y -o output -s ten -q 40 10bit input/video/sample.mkv
+  "$CV" -y -o output -s ten -q 40 10bit input/video/sample.mkv
   assert_file output/input/video/sample.ten.mkv &&
     assert_video_decodes output/input/video/sample.ten.mkv &&
     assert_audio_decodes output/input/video/sample.ten.mkv &&
@@ -289,7 +289,7 @@ case_video_10bit() {
 
 case_vcrop() {
   cd "$WORK_DIR"
-  "$CV2" -y -o output -s cropped -q 40 vcrop input/video/sample.mkv
+  "$CV" -y -o output -s cropped -q 40 vcrop input/video/sample.mkv
   local original_size cropped_size
   original_size="$(image_size input/video/sample.mkv)"
   cropped_size="$(image_size output/input/video/sample.cropped.crop.mkv)"
@@ -300,7 +300,7 @@ case_vcrop() {
 
 case_vstrip() {
   cd "$WORK_DIR"
-  "$CV2" -y -o output -s clean vstrip input/video/sample.mkv
+  "$CV" -y -o output -s clean vstrip input/video/sample.mkv
   assert_file output/input/video/sample.clean.strip.mkv &&
     assert_video_decodes output/input/video/sample.clean.strip.mkv &&
     assert_audio_decodes output/input/video/sample.clean.strip.mkv
@@ -308,69 +308,69 @@ case_vstrip() {
 
 case_gif() {
   cd "$WORK_DIR"
-  "$CV2" -y -o output -s animated gif input/video/sample.mkv
+  "$CV" -y -o output -s animated gif input/video/sample.mkv
   assert_image_format output/input/video/sample.animated.gif GIF
 }
 
 case_zip() {
   cd "$WORK_DIR"
-  "$CV2" -y -o archives -s packed zip input/files/a.txt input/files/nested
+  "$CV" -y -o archives -s packed zip input/files/a.txt input/files/nested
   assert_file archives/input/files/a.txt.packed.zip &&
     assert_file archives/input/files/nested.packed.zip
 }
 
 case_zip_skip() {
   cd "$WORK_DIR"
-  "$CV2" -y -o archives zip archives/input/files/a.txt.packed.zip
+  "$CV" -y -o archives zip archives/input/files/a.txt.packed.zip
 }
 
 case_unzip() {
   cd "$WORK_DIR"
-  "$CV2" -y -o extracted -s unpacked unzip archives/input/files/nested.packed.zip
+  "$CV" -y -o extracted -s unpacked unzip archives/input/files/nested.packed.zip
   assert_text extracted/archives/input/files/nested.packed.unpacked/input/files/nested/b.txt beta
 }
 
 case_7z() {
   cd "$WORK_DIR"
-  "$CV2" -y -o archives -s packed 7z input/files/a.txt input/files/nested/
+  "$CV" -y -o archives -s packed 7z input/files/a.txt input/files/nested/
   assert_file archives/input/files/a.txt.packed.7z &&
     assert_file archives/input/files/nested.packed.7z
 }
 
 case_7z_skip() {
   cd "$WORK_DIR"
-  "$CV2" -y -o archives 7z archives/input/files/a.txt.packed.7z
+  "$CV" -y -o archives 7z archives/input/files/a.txt.packed.7z
 }
 
 case_un7z() {
   cd "$WORK_DIR"
-  "$CV2" -y -o extracted -s unpacked un7z archives/input/files/nested.packed.7z
+  "$CV" -y -o extracted -s unpacked un7z archives/input/files/nested.packed.7z
   assert_text extracted/archives/input/files/nested.packed.unpacked/input/files/nested/b.txt beta
 }
 
 case_7zp() {
   cd "$WORK_DIR"
-  printf 'secret\nsecret\n' | "$CV2" -y -o archives -s secret 7zp input/files/a.txt
+  printf 'secret\nsecret\n' | "$CV" -y -o archives -s secret 7zp input/files/a.txt
   assert_file archives/input/files/a.txt.secret.7z
   7z t -psecret archives/input/files/a.txt.secret.7z
 }
 
 case_validate() {
-  "$CV2" validate
+  "$CV" validate
 }
 
 case_usage_errors() {
   cd "$WORK_DIR"
-  expect_status 64 "$CV2" -q 5 gif input/video/sample.mkv &&
-    expect_status 64 "$CV2" -r 720p mp3 input/audio/tone.wav &&
-    expect_status 66 "$CV2" jpg input/images/missing.png
+  expect_status 2 "$CV" -q 5 gif input/video/sample.mkv &&
+    expect_status 2 "$CV" -r 720p mp3 input/audio/tone.wav &&
+    expect_status 66 "$CV" jpg input/images/missing.png
 }
 
 main() {
-  check_cv2 || exit 1
+  check_cv || exit 1
 
-  section "Validate full cv2 toolset"
-  "$CV2" validate || exit $?
+  section "Validate full cv toolset"
+  "$CV" validate || exit $?
 
   make_fixtures || exit 1
 
