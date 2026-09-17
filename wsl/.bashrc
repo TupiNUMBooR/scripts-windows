@@ -118,4 +118,4 @@ fi
 
 # alias
 alias ffmpeg='ffmpeg -hide_banner'
-alias ffmpeg='ffprobe -hide_banner'
+alias ffprobe='ffprobe -hide_banner'
