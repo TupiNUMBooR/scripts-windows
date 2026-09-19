@@ -26,6 +26,8 @@ yes=false
 delete_source=false
 files=()
 pids=()
+pids_sources=()
+failed_files=()
 failed=false
 result_code=0
 
@@ -169,9 +171,24 @@ need_commands() {
 record_status() {
   local status="$1"
 
-  ((status == 0)) && return
+  if ((status == 0)); then
+    return 0
+  fi
+
   failed=true
-  ((result_code == 0)) && result_code="$status"
+  if ((result_code == 0)); then
+    result_code="$status"
+  fi
+
+  return 0
+}
+
+record_failure() {
+  local source="$1"
+  local status="$2"
+
+  failed_files+=("$source")
+  record_status "$status"
 }
 
 print_command() {
@@ -203,17 +220,20 @@ delete_source_if_requested() {
 }
 
 queue_job() {
+  local source="$2"
+
   if "$dry_run"; then
     if "$@"; then
       return
     else
-      record_status "$?"
+      record_failure "$source" "$?"
       return
     fi
   fi
 
   "$@" &
   pids+=("$!")
+  pids_sources+=("$source")
 
   if ((${#pids[@]} >= parallel)); then
     wait_jobs
@@ -221,19 +241,22 @@ queue_job() {
 }
 
 wait_jobs() {
+  local index
   local pid
   local status
 
-  for pid in "${pids[@]}"; do
+  for index in "${!pids[@]}"; do
+    pid="${pids[$index]}"
     if wait "$pid"; then
       :
     else
       status="$?"
-      record_status "$status"
+      record_failure "${pids_sources[$index]}" "$status"
     fi
   done
 
   pids=()
+  pids_sources=()
 }
 
 normalize_suffix() {
@@ -958,21 +981,21 @@ main() {
         if convert_video "$source"; then
           :
         else
-          record_status "$?"
+          record_failure "$source" "$?"
         fi
         ;;
       7z|7zp|zip|unzip|un7z)
         if process_archive "$source"; then
           :
         else
-          record_status "$?"
+          record_failure "$source" "$?"
         fi
         ;;
       cp)
         if copy_file "$source"; then
           :
         else
-          record_status "$?"
+          record_failure "$source" "$?"
         fi
         ;;
     esac
@@ -981,7 +1004,10 @@ main() {
   wait_jobs
 
   if "$failed"; then
-    error "one or more operations failed"
+    error "operations failed: ${#failed_files[@]}"
+    for source in "${failed_files[@]}"; do
+      error "failed file: $source"
+    done
     exit "${result_code:-74}"
   fi
 

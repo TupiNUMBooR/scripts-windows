@@ -297,6 +297,23 @@ case_audio() {
     assert_stream_codec output/input/audio/tone.audio.wav a:0 pcm_s16le
 }
 
+case_audio_batch_failure() {
+  cd "$WORK_DIR"
+  printf 'not an audio file\n' > input/audio/broken.mp3
+  printf 'not an audio file\n' > input/audio/broken-2.mp3
+
+  if "$CV" -y -p 2 -o output -s batch mp3 \
+    input/audio/tone.wav input/audio/broken.mp3 input/audio/broken-2.mp3 >"$WORK_DIR/audio-batch.out" 2>&1; then
+    printf 'Expected audio conversions to fail\n' >&2
+    return 1
+  fi
+
+  assert_file output/input/audio/tone.wav.batch.mp3 || return 1
+  grep -q 'operations failed: 2' "$WORK_DIR/audio-batch.out" || return 1
+  grep -q 'failed file: input/audio/broken.mp3' "$WORK_DIR/audio-batch.out" || return 1
+  grep -q 'failed file: input/audio/broken-2.mp3' "$WORK_DIR/audio-batch.out"
+}
+
 case_opus() {
   cd "$WORK_DIR"
   "$CV" -y -o output -s audio opus input/audio/tone.wav
@@ -474,6 +491,7 @@ main() {
   run_test "dry-run creates nothing" case_dry_run
   run_test "jpg png avif and parallel images" case_images
   run_test "mp3 flac ogg wav" case_audio
+  run_test "audio batch continues and reports failed files" case_audio_batch_failure
 
   run_test "opus pipeline" case_opus
   run_test "delete-source removes source on success" case_delete_source_success
