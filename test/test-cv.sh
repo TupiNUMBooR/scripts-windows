@@ -3,7 +3,11 @@ set -uo pipefail
 # test-cv.sh
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CV="${CV:-$SCRIPT_DIR/../bin/cv}"
+if [[ -x "$SCRIPT_DIR/cv" ]]; then
+  CV="$SCRIPT_DIR/cv"
+else
+  CV="${CV:-$SCRIPT_DIR/../bin/cv}"
+fi
 WORK_DIR="$(mktemp -d /tmp/test-cv.XXXXXX)"
 
 passed=0
@@ -59,6 +63,10 @@ assert_file() {
 
 assert_dir() {
   [[ -d "$1" ]]
+}
+
+assert_missing() {
+  [[ ! -e "$1" ]]
 }
 
 assert_text() {
@@ -185,6 +193,8 @@ make_fixtures() {
   ffmpeg -hide_banner -y \
     -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=1' \
     -c:a pcm_s16le "$WORK_DIR/input/audio/tone.wav"
+  cp "$WORK_DIR/input/audio/tone.wav" "$WORK_DIR/input/audio/tone-delete.wav"
+  cp "$WORK_DIR/input/audio/tone.wav" "$WORK_DIR/input/audio/tone-keep.wav"
 
   ffmpeg -hide_banner -y \
     -i "$WORK_DIR/input/audio/tone.wav" \
@@ -293,6 +303,23 @@ case_opus() {
   assert_file output/input/audio/tone.audio.opus &&
     assert_audio_decodes output/input/audio/tone.audio.opus &&
     assert_stream_codec output/input/audio/tone.audio.opus a:0 opus
+}
+
+
+case_delete_source_success() {
+  cd "$WORK_DIR"
+  "$CV" -y -d -o output -s gone mp3 input/audio/tone-delete.wav
+  assert_file output/input/audio/tone-delete.gone.mp3 &&
+    assert_missing input/audio/tone-delete.wav
+}
+
+case_delete_source_failure() {
+  cd "$WORK_DIR"
+  mkdir -p output/input/audio
+  printf 'old\n' > output/input/audio/tone-keep.gone.mp3
+  expect_status 73 "$CV" -d -o output -s gone mp3 input/audio/tone-keep.wav &&
+    assert_file output/input/audio/tone-keep.gone.mp3 &&
+    assert_file input/audio/tone-keep.wav
 }
 
 case_video_264() {
@@ -405,6 +432,7 @@ case_usage_errors() {
   cd "$WORK_DIR"
   expect_status 2 "$CV" -q 5 gif input/video/sample.mkv &&
     expect_status 2 "$CV" -r 720p mp3 input/audio/tone.wav &&
+    expect_status 2 "$CV" -d cp input/files/a.txt &&
     expect_status 66 "$CV" jpg input/images/missing.png
 }
 
@@ -423,6 +451,8 @@ main() {
   run_test "mp3 flac ogg wav" case_audio
 
   run_test "opus pipeline" case_opus
+  run_test "delete-source removes source on success" case_delete_source_success
+  run_test "delete-source keeps source on failure" case_delete_source_failure
 
   run_test "H.264 MP4 conversion" case_video_264
   run_test "H.265 MKV conversion" case_video_265

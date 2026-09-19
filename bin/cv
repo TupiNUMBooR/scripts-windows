@@ -23,6 +23,7 @@ parallel="$DEFAULT_PARALLEL"
 dry_run=false
 verbose=false
 yes=false
+delete_source=false
 files=()
 pids=()
 failed=false
@@ -78,6 +79,7 @@ Options:
   -n, --dry-run           Print commands without running them
   -v, --verbose           Print input and output paths
   -y, --yes               Allow overwriting or updating existing outputs
+  -d, --delete-source     Delete source file after successful conversion
   -h, --help              Show this help
 
 Resolution:
@@ -185,6 +187,19 @@ run_command() {
   fi
 
   "$@"
+}
+
+delete_source_if_requested() {
+  local source="$1"
+  local target="$2"
+
+  "$delete_source" || return 0
+  "$dry_run" && return 0
+
+  [[ -f "$source" ]] || return 0
+  [[ -f "$target" && -s "$target" ]] || return 74
+
+  rm -f -- "$source"
 }
 
 queue_job() {
@@ -386,6 +401,16 @@ validate_options() {
     error "--parallel must be a positive integer"
     return 2
   }
+
+  if "$delete_source"; then
+    case "$command_name" in
+      264|265|10bit|vcrop|vstrip|gif|mp3|flac|ogg|opus|wav|jpg|png|avif) ;;
+      *)
+        error "--delete-source is only supported for media conversion commands"
+        return 2
+        ;;
+    esac
+  fi
 }
 
 print_summary() {
@@ -404,6 +429,7 @@ print_summary() {
 
   "$dry_run" && printf 'Mode:        %bdry-run%b\n' "$YELLOW" "$RESET"
   "$yes" && printf 'Overwrite:   %byes%b\n' "$YELLOW" "$RESET"
+  "$delete_source" && printf 'Delete src:  %byes%b\n' "$YELLOW" "$RESET"
   printf '\n'
 }
 
@@ -459,6 +485,7 @@ parse_short_options() {
       n) dry_run=true ;;
       v) verbose=true ;;
       y) yes=true ;;
+      d) delete_source=true ;;
       h)
         usage
         exit 0
@@ -511,6 +538,7 @@ parse_args() {
       --dry-run) dry_run=true ;;
       --verbose) verbose=true ;;
       --yes) yes=true ;;
+      --delete-source) delete_source=true ;;
       --output|--suffix|--quality|--resolution|--parallel)
         require_option_value "$arg" "${2:-}"
         case "$arg" in
@@ -641,7 +669,8 @@ convert_video() {
   esac
 
   prepare_output "$source" "$target" || return $?
-  run_command "${cmd[@]}"
+  run_command "${cmd[@]}" || return $?
+  delete_source_if_requested "$source" "$target"
 }
 # endregion
 
@@ -702,14 +731,16 @@ convert_audio() {
         printf '%q ' "${right[@]}"
         printf '\n'
       else
-        "${left[@]}" | "${right[@]}"
+        "${left[@]}" | "${right[@]}" || return $?
+        delete_source_if_requested "$source" "$target" || return $?
       fi
       return
       ;;
   esac
 
   prepare_output "$source" "$target" || return $?
-  run_command "${cmd[@]}"
+  run_command "${cmd[@]}" || return $?
+  delete_source_if_requested "$source" "$target"
 }
 # endregion
 
@@ -727,7 +758,8 @@ convert_image() {
   cmd+=("$target")
 
   prepare_output "$source" "$target" || return $?
-  run_command "${cmd[@]}"
+  run_command "${cmd[@]}" || return $?
+  delete_source_if_requested "$source" "$target"
 }
 # endregion
 
@@ -793,7 +825,8 @@ copy_file() {
   cmd+=(-- "$source" "$target")
 
   prepare_output "$source" "$target" || return $?
-  run_command "${cmd[@]}"
+  run_command "${cmd[@]}" || return $?
+  delete_source_if_requested "$source" "$target"
 }
 
 # endregion
@@ -840,7 +873,7 @@ main() {
         error "validate does not accept files"
         exit 2
       }
-      [[ "$output_dir" == "$DEFAULT_OUTPUT" && -z "$suffix" && -z "$quality" && -z "$resolution" && "$parallel" == "$DEFAULT_PARALLEL" && "$dry_run" == false && "$verbose" == false && "$yes" == false ]] || {
+      [[ "$output_dir" == "$DEFAULT_OUTPUT" && -z "$suffix" && -z "$quality" && -z "$resolution" && "$parallel" == "$DEFAULT_PARALLEL" && "$dry_run" == false && "$verbose" == false && "$yes" == false && "$delete_source" == false ]] || {
         error "validate does not accept options"
         exit 2
       }
