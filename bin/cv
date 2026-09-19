@@ -3,7 +3,7 @@ set -Eeuo pipefail
 # cv2
 
 SCRIPT_NAME="$(basename "$0")"
-VERSION="2026-09-07"
+VERSION="2026-09-19"
 
 DEFAULT_OUTPUT="."
 DEFAULT_PARALLEL=4
@@ -658,10 +658,26 @@ convert_audio() {
   [[ -z "$quality" ]] || quality_args=(-q:a "$quality")
 
   case "$command_name" in
-    mp3|flac|ogg|wav)
+    mp3)
+      target="$(media_output_path "$source" mp3)"
+      local lower="${source,,}"
+      cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source")
+
+      # Ogg/Opus stores normal music tags on the audio stream rather than
+      # as container-global metadata. Promote those tags to MP3/ID3.
+      [[ "$lower" == *.ogg || "$lower" == *.opus ]] && cmd+=(-map_metadata 0:s:a:0)
+
+      [[ -z "$quality" ]] || cmd+=(-q:a "$quality")
+
+      # Preserve embedded cover art when FFmpeg selects an attached picture,
+      # and write the broadly compatible ID3v2.3 tag format. Regular video
+      # inputs still auto-select their audio stream for MP3 output.
+      cmd+=(-c:v copy -id3v2_version 3 "$target")
+      ;;
+    flac|ogg|wav)
       target="$(media_output_path "$source" "$command_name")"
       cmd=(ffmpeg -hide_banner "${overwrite[@]}" -i "$source")
-      [[ "$command_name" == mp3 || "$command_name" == ogg ]] && cmd+=("${quality_args[@]}")
+      [[ "$command_name" == ogg ]] && cmd+=("${quality_args[@]}")
       cmd+=("$target")
       ;;
     opus)

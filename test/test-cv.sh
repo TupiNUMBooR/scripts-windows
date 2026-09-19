@@ -3,7 +3,7 @@ set -uo pipefail
 # test-cv.sh
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CV="$SCRIPT_DIR/../bin/cv"
+CV="${CV:-$SCRIPT_DIR/../bin/cv}"
 WORK_DIR="$(mktemp -d /tmp/test-cv.XXXXXX)"
 
 passed=0
@@ -105,6 +105,23 @@ assert_stream_codec() {
   [[ "$(probe_stream "$file" "$selector" codec_name)" == "$expected" ]]
 }
 
+probe_format_tag() {
+  local file="$1"
+  local tag="$2"
+
+  ffprobe -hide_banner -v error \
+    -show_entries "format_tags=$tag" \
+    -of default=nw=1:nk=1 \
+    "$file" | head -n 1
+}
+
+assert_format_tag() {
+  local file="$1"
+  local tag="$2"
+  local expected="$3"
+  [[ "$(probe_format_tag "$file" "$tag")" == "$expected" ]]
+}
+
 assert_pixel_format() {
   local file="$1"
   local expected="$2"
@@ -170,6 +187,19 @@ make_fixtures() {
     -c:a pcm_s16le "$WORK_DIR/input/audio/tone.wav"
 
   ffmpeg -hide_banner -y \
+    -i "$WORK_DIR/input/audio/tone.wav" \
+    -c:a flac \
+    "$WORK_DIR/input/audio/tone.flac"
+
+  ffmpeg -hide_banner -y \
+    -i "$WORK_DIR/input/audio/tone.wav" \
+    -c:a libopus \
+    -metadata title='Tagged Opus' \
+    -metadata artist='cv test' \
+    -metadata album='Metadata Test' \
+    "$WORK_DIR/input/audio/tagged.opus"
+
+  ffmpeg -hide_banner -y \
     -f lavfi -i 'testsrc2=size=160x120:rate=4:duration=12' \
     -f lavfi -i 'sine=frequency=660:sample_rate=48000:duration=12' \
     -vf 'pad=320:240:80:60:black' \
@@ -227,16 +257,28 @@ case_images() {
 
 case_audio() {
   cd "$WORK_DIR"
-  # MP3 intentionally starts from a real video container. This verifies that
-  # FFmpeg selects a usable audio stream without cv forcing -map or -vn.
-  "$CV" -y -p 2 -o output -s audio -q 4 mp3 input/video/sample.mkv
+  # MP3 accepts video and common audio containers. The video case verifies
+  # that FFmpeg still auto-selects usable audio without cv forcing -map/-vn.
+  "$CV" -y -p 2 -o output -s movie mp3 input/video/sample.mkv
+  "$CV" -y -o output -s wavmp3 mp3 input/audio/tone.wav
+  "$CV" -y -o output -s flacmp3 mp3 input/audio/tone.flac
+  "$CV" -y -o output -s opusmp3 mp3 input/audio/tagged.opus
   "$CV" -y -o output -s audio flac input/audio/tone.wav
   "$CV" -y -o output -s audio -q 4 ogg input/audio/tone.wav
   "$CV" -y -o output -s audio wav input/audio/tone.wav
 
-  assert_file output/input/video/sample.audio.mp3 &&
-    assert_audio_decodes output/input/video/sample.audio.mp3 &&
-    assert_stream_codec output/input/video/sample.audio.mp3 a:0 mp3 &&
+  assert_file output/input/video/sample.movie.mp3 &&
+    assert_audio_decodes output/input/video/sample.movie.mp3 &&
+    assert_stream_codec output/input/video/sample.movie.mp3 a:0 mp3 &&
+    assert_audio_decodes output/input/audio/tone.wavmp3.mp3 &&
+    assert_stream_codec output/input/audio/tone.wavmp3.mp3 a:0 mp3 &&
+    assert_audio_decodes output/input/audio/tone.flacmp3.mp3 &&
+    assert_stream_codec output/input/audio/tone.flacmp3.mp3 a:0 mp3 &&
+    assert_audio_decodes output/input/audio/tagged.opusmp3.mp3 &&
+    assert_stream_codec output/input/audio/tagged.opusmp3.mp3 a:0 mp3 &&
+    assert_format_tag output/input/audio/tagged.opusmp3.mp3 title 'Tagged Opus' &&
+    assert_format_tag output/input/audio/tagged.opusmp3.mp3 artist 'cv test' &&
+    assert_format_tag output/input/audio/tagged.opusmp3.mp3 album 'Metadata Test' &&
     assert_audio_decodes output/input/audio/tone.audio.flac &&
     assert_stream_codec output/input/audio/tone.audio.flac a:0 flac &&
     assert_audio_decodes output/input/audio/tone.audio.ogg &&
