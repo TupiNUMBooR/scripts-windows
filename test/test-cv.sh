@@ -231,7 +231,7 @@ check_cv() {
 
 case_cp() {
   cd "$WORK_DIR"
-  "$CV" -vo output -s backup cp input/files/a.txt input/files/nested/b.txt
+  "$CV" -y -vo output -s backup cp input/files/a.txt input/files/nested/b.txt
   assert_text output/input/files/a.backup.txt alpha &&
     assert_text output/input/files/nested/b.backup.txt beta
 }
@@ -436,6 +436,31 @@ case_usage_errors() {
     expect_status 66 "$CV" jpg input/images/missing.png
 }
 
+case_large_batch_confirmation() {
+  cd "$WORK_DIR"
+  local files=()
+  local index
+  local output
+
+  for index in {1..2}; do
+    printf 'file %s\n' "$index" > "input/files/large-$index.txt"
+    files+=("input/files/large-$index.txt")
+  done
+
+  if output="$(printf 'n\n' | "$CV" -n -o output cp "${files[@]}" 2>&1)"; then
+    printf 'Expected confirmation decline to fail\n' >&2
+    return 1
+  fi
+
+  [[ "$output" == *'Files count:'*'2'*'Process 2 files? [Y/n]'*'operation cancelled'* ]] || {
+    printf 'Unexpected confirmation output: %s\n' "$output" >&2
+    return 1
+  }
+
+  "$CV" -n -y -o output cp "${files[@]}" >"$WORK_DIR/large-batch.out" 2>&1
+  ! grep -q 'Process 2 files?' "$WORK_DIR/large-batch.out"
+}
+
 main() {
   check_cv || exit 1
 
@@ -472,6 +497,7 @@ main() {
   run_test "validate all dependencies" case_validate
 
   run_test "usage and missing-input errors" case_usage_errors
+  run_test "confirmation for batches larger than one file" case_large_batch_confirmation
 
   section "Result"
   printf 'Passed:  %d\n' "$passed"

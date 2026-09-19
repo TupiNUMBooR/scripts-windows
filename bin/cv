@@ -433,6 +433,23 @@ print_summary() {
   printf '\n'
 }
 
+confirm_large_batch() {
+  local answer
+
+  ((${#files[@]} <= 1)) && return 0
+  "$yes" && return 0
+
+  printf 'Process %d files? [Y/n] ' "${#files[@]}" >&2
+  read -r answer || answer=''
+  case "${answer,,}" in
+    ''|y|yes) ;;
+    *)
+      error "operation cancelled"
+      return 1
+      ;;
+  esac
+}
+
 print_verbose_path() {
   local source="$1"
   local target
@@ -925,6 +942,7 @@ main() {
   esac
 
   print_summary
+  confirm_large_batch || exit $?
 
   for source in "${files[@]}"; do
     "$verbose" && print_verbose_path "$source"
