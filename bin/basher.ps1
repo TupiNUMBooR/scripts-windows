@@ -1,26 +1,19 @@
-param(
-    [Alias('b')]
-    [switch]$Build
-)
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$WorkDir = (Get-Location).Path
-$BasherDir = Join-Path $PSScriptRoot '..\..\basher'
+$Image = 'ghcr.io/tupinumboor/basher:latest'
+$EnvFile = Join-Path $PSScriptRoot '..\.env'
 
-$ComposeArgs = @('compose', 'run', '--rm')
-
-if ($Build) {
-    $ComposeArgs += '--build'
+docker pull $Image
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Could not pull the image; using the local image if available."
 }
 
-$ComposeArgs += @('--volume', "${WorkDir}:/workspace", 'basher')
+$DockerArgs = @(
+    'run', '--rm', '--interactive', '--tty',
+    '--volume', "$(Get-Location):/workspace",
+    '--env-file', $EnvFile
+)
 
-Push-Location $BasherDir
-try {
-    docker @ComposeArgs
-}
-finally {
-    Pop-Location
-}
+docker @DockerArgs $Image
+exit $LASTEXITCODE
