@@ -1,1 +1,1 @@
-yt-dlp -S "res:1080" "$1"
+yt-dlp -S "res:1080" "$@"
