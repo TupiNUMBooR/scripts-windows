@@ -1,1 +1,9 @@
-yt-dlp -f "ba" -x --audio-format mp3 --embed-thumbnail --embed-metadata --embed-chapters "$@"
+yt-dlp \
+    -f "ba" \
+    -x \
+    --audio-format mp3 \
+    --windows-filenames \
+    --embed-thumbnail \
+    --embed-metadata \
+    --embed-chapters \
+    "$@"
