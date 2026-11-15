@@ -11,6 +11,7 @@ exiv2
 fastfetch
 ffmpeg
 git
+github-cli
 go-yq
 htop
 id3v2

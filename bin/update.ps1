@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 #region Variables
 
 $WslDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'wsl'
+$WslUpdateScript = Join-Path $PSScriptRoot 'wsl-update.sh'
 $Distro = 'archlinux'
 
 $WingetImportArgs = @(
@@ -94,7 +95,9 @@ $WindowsGitConfig = Join-Path $env:USERPROFILE '.gitconfig'
 #region WSL installation
 
 wsl --update
-wsl --install $Distro
+if (-not ((wsl --list --quiet) -replace "`0", '' | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $Distro })) {
+    wsl --install $Distro
+}
 wsl --set-default $Distro
 
 # Initialize the distro before configuring it.
@@ -115,6 +118,21 @@ if (Test-Path $WindowsGitConfig) {
 }
 else {
     Write-Warning "Windows Git config not found: $WindowsGitConfig"
+}
+
+#endregion
+
+#region WSL packages and configuration
+
+$WslUpdateScriptWindowsPath = $WslUpdateScript -replace '\\', '/'
+$WslUpdateScriptPath = (& wsl -d $Distro -- wslpath -u $WslUpdateScriptWindowsPath).Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw 'Could not resolve the WSL update script path.'
+}
+
+wsl -d $Distro -- bash $WslUpdateScriptPath
+if ($LASTEXITCODE -ne 0) {
+    throw "WSL update failed with exit code $LASTEXITCODE."
 }
 
 #endregion
